@@ -10,6 +10,6 @@ include_directories(${GAZEBO_INCLUDE_DIRS})
 link_directories(${GAZEBO_LIBRARY_DIRS})
 add_definitions(${GAZEBO_CXX_FLAGS})
 
-add_library(skyweave_link_tracker SHARED src/skyweave_link_tracker.cc)
+add_library(skyweave_link_tracker SHARED src/skyweave_link_tracker.cpp)
 
 target_link_libraries(skyweave_link_tracker ${GAZEBO_LIBRARIES})
