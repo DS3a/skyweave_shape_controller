@@ -3,12 +3,14 @@
 #include <gazebo/gazebo.hh>
 #include <gazebo/physics/physics.hh>
 
+#include <Eigen/Core>
+
 #include <algorithm>
+#include <map>
+#include <regex>
 #include <sstream>
 #include <string>
 #include <vector>
-#include <math.h>
-
 
 namespace gazebo {
 class SkyweaveLinkTracker : public ModelPlugin {
@@ -68,6 +70,19 @@ class SkyweaveLinkTracker : public ModelPlugin {
               });
   }
 
+  static bool ParseMassLinkName(const std::string& name, int& xIndex,
+                                int& yIndex) {
+    static const std::regex pattern(R"(^mass_x(-?\d+)_y(-?\d+)$)");
+    std::smatch match;
+    if (!std::regex_match(name, match, pattern) || match.size() != 3) {
+      return false;
+    }
+
+    xIndex = std::stoi(match[1].str());
+    yIndex = std::stoi(match[2].str());
+    return true;
+  }
+
   void OnUpdate(const common::UpdateInfo& info) {
     if (this->printPeriod > 0.0) {
       const double elapsed = (info.simTime - this->lastPrintTime).Double();
@@ -77,6 +92,7 @@ class SkyweaveLinkTracker : public ModelPlugin {
     }
 
     this->lastPrintTime = info.simTime;
+    this->positions.clear();
 
     std::ostringstream stream;
     stream << "Skyweave link positions at " << info.simTime.Double() << "s ("
@@ -88,6 +104,13 @@ class SkyweaveLinkTracker : public ModelPlugin {
       const auto pose = link->WorldPose();
       stream << " - " << link->GetName() << ": " << pose.Pos().X() << " "
              << pose.Pos().Y() << " " << pose.Pos().Z() << std::endl;
+
+      int xIndex = 0;
+      int yIndex = 0;
+      if (ParseMassLinkName(link->GetName(), xIndex, yIndex)) {
+        this->positions[{xIndex, yIndex}] =
+            Eigen::Vector3d(pose.Pos().X(), pose.Pos().Y(), pose.Pos().Z());
+      }
     }
 
     gzmsg << stream.str();
@@ -95,6 +118,8 @@ class SkyweaveLinkTracker : public ModelPlugin {
 
   physics::ModelPtr model;
   physics::WorldPtr world;
+  std::vector<physics::LinkPtr> links;
+  std::map<std::pair<int, int>, Eigen::Vector3d> positions;
   int num_links = 0; // the total number of links in the model
   int side_links = 0; // the number of links on one side of the model (square root of the total number of links)
   std::vector<physics::LinkPtr> links;
