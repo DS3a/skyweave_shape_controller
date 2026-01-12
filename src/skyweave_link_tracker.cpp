@@ -36,6 +36,9 @@ class SkyweaveLinkTracker : public ModelPlugin {
     this->updateConnection = event::Events::ConnectWorldUpdateBegin(
         std::bind(&SkyweaveLinkTracker::OnUpdate, this, std::placeholders::_1));
 
+
+    this->num_links = this->links.size();
+    this->side_links = static_cast<int>(std::sqrt(this->num_links));
     gzmsg << "SkyweaveLinkTracker loaded with " << this->links.size()
           << " links." << std::endl;
   }
@@ -117,6 +120,9 @@ class SkyweaveLinkTracker : public ModelPlugin {
   physics::WorldPtr world;
   std::vector<physics::LinkPtr> links;
   std::map<std::pair<int, int>, Eigen::Vector3d> positions;
+  int num_links = 0; // the total number of links in the model
+  int side_links = 0; // the number of links on one side of the model (square root of the total number of links)
+  std::vector<physics::LinkPtr> links;
   event::ConnectionPtr updateConnection;
   common::Time lastPrintTime;
   double printRate = 2.0;

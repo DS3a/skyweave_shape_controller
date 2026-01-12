@@ -7,10 +7,19 @@ set(CMAKE_CXX_STANDARD_REQUIRED ON)
 find_package(gazebo REQUIRED)
 find_package(Eigen3 REQUIRED)
 
-include_directories(${GAZEBO_INCLUDE_DIRS} ${EIGEN3_INCLUDE_DIRS})
+include_directories(${GAZEBO_INCLUDE_DIRS}
+                    ${EIGEN3_INCLUDE_DIRS}
+                    ${PINOCCHIO_INCLUDE_DIRS}
+                    )
+link_directories(${PINOCCHIO_LIBRARY_DIRS})
+add_definitions(${PINOCCHIO_CFLAGS_OTHER})
 link_directories(${GAZEBO_LIBRARY_DIRS})
 add_definitions(${GAZEBO_CXX_FLAGS})
 
 add_library(skyweave_link_tracker SHARED src/skyweave_link_tracker.cpp)
 
-target_link_libraries(skyweave_link_tracker ${GAZEBO_LIBRARIES})
+target_link_libraries(skyweave_link_tracker 
+            ${GAZEBO_LIBRARIES}
+            ${EIGEN3_LIBRARIES}
+            ${PINOCCHIO_LIBRARIES}
+            )
