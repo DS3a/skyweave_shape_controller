@@ -5,12 +5,24 @@
 
 #include <Eigen/Core>
 
+#include <pinocchio/parsers/sdf.hpp>
+#include <pinocchio/algorithm/joint-configuration.hpp>
+#include <pinocchio/algorithm/kinematics.hpp>
+#include <pinocchio/multibody/model.hpp>
+#include <pinocchio/algorithm/contact-info.hpp>  // for RigidConstraintModel (depending on version)
+
+ 
+
 #include <algorithm>
 #include <map>
 #include <regex>
 #include <sstream>
 #include <string>
 #include <vector>
+
+
+// this is the path to the open tree model, not the closed loop which is being used by gazebo
+#define SDF_PATH "/home/ds3a/dev/wadiyan_carpet/models/mesh/mass_mesh_open_tree.sdf"
 
 namespace gazebo {
 class SkyweaveLinkTracker : public ModelPlugin {
@@ -36,6 +48,16 @@ class SkyweaveLinkTracker : public ModelPlugin {
     this->updateConnection = event::Events::ConnectWorldUpdateBegin(
         std::bind(&SkyweaveLinkTracker::OnUpdate, this, std::placeholders::_1));
 
+
+    this->pin_model = std::make_shared<pinocchio::Model>();
+    pinocchio::sdf::buildModel(std::string(SDF_PATH), *(this->pin_model), this->contact_models
+    , std::string("mass_x0_y0"));
+    
+    this->pin_data = std::make_shared<pinocchio::Data>(*(this->pin_model));
+    
+
+    this->num_links = this->links.size();
+    this->side_links = static_cast<int>(std::sqrt(this->num_links));
     gzmsg << "SkyweaveLinkTracker loaded with " << this->links.size()
           << " links." << std::endl;
   }
@@ -94,20 +116,42 @@ class SkyweaveLinkTracker : public ModelPlugin {
     std::ostringstream stream;
     stream << "Skyweave link positions at " << info.simTime.Double() << "s ("
            << this->links.size() << " links)" << std::endl;
+
+    Eigen::Vector3d centre;
     for (const auto& link : this->links) {
       if (!link) {
         continue;
       }
       const auto pose = link->WorldPose();
-      stream << " - " << link->GetName() << ": " << pose.Pos().X() << " "
-             << pose.Pos().Y() << " " << pose.Pos().Z() << std::endl;
+      // stream << " - " << link->GetName() << ": " << pose.Pos().X() << " "
+      //        << pose.Pos().Y() << " " << pose.Pos().Z() << std::endl;
 
       int xIndex = 0;
       int yIndex = 0;
       if (ParseMassLinkName(link->GetName(), xIndex, yIndex)) {
         this->positions[{xIndex, yIndex}] =
             Eigen::Vector3d(pose.Pos().X(), pose.Pos().Y(), pose.Pos().Z());
+        
+        if (xIndex == 0 && yIndex == 0) {
+          centre = Eigen::Vector3d(pose.Pos().X(), pose.Pos().Y(), pose.Pos().Z());
+        }
       }
+    }
+
+
+    stream << "Skyweave link positions grid:" << std::endl;
+    for (int y = -this->side_links/2; y <= this->side_links/2; ++y) {
+      for (int x = -this->side_links/2; x <= this->side_links/2; ++x) {
+        auto it = this->positions.find({x, y});
+        if (it != this->positions.end()) {
+          Eigen::Vector3d& pos = it->second;
+          pos -= centre; // make it a "offset from centre"
+          stream << x << ", " << y << ": " << pos << "\n\n";
+        } else {
+          stream << "(N/A) ";
+        }
+      }
+      stream << std::endl;
     }
 
     gzmsg << stream.str();
@@ -115,8 +159,16 @@ class SkyweaveLinkTracker : public ModelPlugin {
 
   physics::ModelPtr model;
   physics::WorldPtr world;
+
   std::vector<physics::LinkPtr> links;
   std::map<std::pair<int, int>, Eigen::Vector3d> positions;
+
+  std::shared_ptr<pinocchio::Model> pin_model;
+  std::shared_ptr<pinocchio::Data> pin_data;
+  PINOCCHIO_STD_VECTOR_WITH_EIGEN_ALLOCATOR(pinocchio::RigidConstraintModel) contact_models;
+
+  int num_links = 0; // the total number of links in the model
+  int side_links = 0; // the number of links on one side of the model (square root of the total number of links)
   event::ConnectionPtr updateConnection;
   common::Time lastPrintTime;
   double printRate = 2.0;
