@@ -1,6 +1,0 @@
-
-
-namespace inverse_kinematics {
-
-
-}

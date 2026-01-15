@@ -16,6 +16,7 @@ namespace skyweave {
 
 using GridIndex = std::pair<int, int>;
 using FrameIndexMap = std::map<GridIndex, pinocchio::FrameIndex>;
+using PositionMap = std::map<GridIndex, Eigen::Vector3d>;
 
 struct ConstraintPair {
   GridIndex first;
@@ -99,7 +100,7 @@ inline Eigen::MatrixXd GetConstraintJacobianMatrix(
 inline Eigen::MatrixXd GetTaskJacobians(const pinocchio::Model& model,
                                         pinocchio::Data& data,
                                         const Eigen::VectorXd& q,
-                                        const std::map<GridIndex, Eigen::Vector3d>&
+                                        const PositionMap&
                                             goal_positions,
                                         const FrameIndexMap& frame_ids) {
   pinocchio::computeJointJacobians(model, data, q);
@@ -231,5 +232,6 @@ inline Eigen::VectorXd SolveIKStep(const pinocchio::Model& model,
   const Eigen::VectorXd sol = KKT.fullPivLu().solve(b);
   return sol.head(num_vars);
 }
+
 
 }  // namespace skyweave
