@@ -10,6 +10,9 @@
 
 #include <inverse_kinematics.hpp>
 
+#include <cmath>
+#include <iostream>
+#include <limits>
 #include <map>
 #include <utility>
 
@@ -53,6 +56,7 @@ class StateEstimator {
 
     Eigen::VectorXd vel_updates = Eigen::VectorXd::Zero(this->pin_model_->nv);
     Eigen::VectorXd prev_pos = this->joint_positions_;
+    double prev_rmse = std::numeric_limits<double>::infinity();
 
     for (int iter=0; iter<2; ++iter) {
       Eigen::VectorXd dq = skyweave::SolveIKStep(
@@ -70,7 +74,34 @@ class StateEstimator {
       this->joint_positions_ = next_pos;
       
       // TODO check the link positions and compare them to the current model state
-      
+      pinocchio::forwardKinematics(*(this->pin_model_), *(this->pin_data_), this->joint_positions_);
+      pinocchio::updateFramePlacements(*(this->pin_model_), *(this->pin_data_));
+
+      double sum_squared_error = 0.0;
+      std::size_t sample_count = 0;
+      for (const auto& [grid_index, measurement] : this->position_measurements) {
+        auto frame_it = this->frame_ids_.find(grid_index);
+        if (frame_it == this->frame_ids_.end()) {
+          continue;
+        }
+
+        const pinocchio::SE3& frame_placement = this->pin_data_->oMf[frame_it->second];
+        const Eigen::Vector3d current_position = frame_placement.translation();
+        this->current_positions_[grid_index] = current_position;
+
+        const Eigen::Vector3d diff = current_position - measurement;
+        sum_squared_error += diff.squaredNorm();
+        ++sample_count;
+      }
+
+      const double rmse = sample_count > 0
+                              ? std::sqrt(sum_squared_error / static_cast<double>(sample_count))
+                              : 0.0;
+      if (rmse > prev_rmse) {
+        std::cerr << "RMSE increased from " << prev_rmse << " to " << rmse
+                  << " after iteration " << iter << ".\n";
+      }
+      prev_rmse = rmse;
     
     }
     // Here you would implement the state estimation logic using
