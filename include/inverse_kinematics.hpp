@@ -210,7 +210,8 @@ inline Eigen::VectorXd SolveIKStep(const pinocchio::Model& model,
                                   pinocchio::Data& data,
                                   const Eigen::VectorXd& q,
                                   const std::vector<ConstraintPair>& constraints,
-                                  const std::map<GridIndex, Eigen::Vector3d>&
+                                  // const std::map<GridIndex, Eigen::Vector3d>&
+                                  const PositionMap&
                                       goal_positions,
                                   const FrameIndexMap& frame_ids,
                                   double reg = 1e-6) {

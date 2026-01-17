@@ -59,15 +59,17 @@ class SkyweaveLinkTracker : public ModelPlugin {
     // for (auto name: this->pin_model->frames) {
     //   gzmsg << name.name << "\n";
     // }
- 
 
+    // this function adds everything to this->frame_ids
     this->CollectLinks(_sdf);
 
+    this->state_estimator = std::make_shared<skyweave::StateEstimator>(this->pin_model, this->frame_ids);
     if (_sdf && _sdf->HasElement("print_rate")) {
       this->printRate = _sdf->Get<double>("print_rate");
     }
     if (this->printRate > 0.0) {
       this->printPeriod = 1.0 / this->printRate;
+      this->state_estimator->setRate(this->printRate);
     }
 
     this->lastPrintTime = this->world->SimTime();
@@ -133,59 +135,59 @@ class SkyweaveLinkTracker : public ModelPlugin {
   }
 
   void OnUpdate(const common::UpdateInfo& info) {
+    // rate of the state estimator
     if (this->printPeriod > 0.0) {
       const double elapsed = (info.simTime - this->lastPrintTime).Double();
       if (elapsed < this->printPeriod) {
-        return;
-      }
-    }
+        // return;
+        // move to check if the controller is up next
+      } else {
+        this->lastPrintTime = info.simTime;
+        this->positions.clear();
 
-    this->lastPrintTime = info.simTime;
-    this->positions.clear();
+        std::ostringstream stream;
+        // stream << "Skyweave link positions at " << info.simTime.Double() << "s ("
+              //  << this->links.size() << " links)" << std::endl;
 
-    std::ostringstream stream;
-    // stream << "Skyweave link positions at " << info.simTime.Double() << "s ("
-          //  << this->links.size() << " links)" << std::endl;
+        Eigen::Vector3d centre;
+        for (const auto& link : this->links) {
+          if (!link) {
+            continue;
+          }
+          const auto pose = link->WorldPose();
+          // stream << " - " << link->GetName() << ": " << pose.Pos().X() << " "
+          //        << pose.Pos().Y() << " " << pose.Pos().Z() << std::endl;
 
-    Eigen::Vector3d centre;
-    for (const auto& link : this->links) {
-      if (!link) {
-        continue;
-      }
-      const auto pose = link->WorldPose();
-      // stream << " - " << link->GetName() << ": " << pose.Pos().X() << " "
-      //        << pose.Pos().Y() << " " << pose.Pos().Z() << std::endl;
-
-      int xIndex = 0;
-      int yIndex = 0;
-      if (ParseMassLinkName(link->GetName(), xIndex, yIndex)) {
-        this->positions[{xIndex, yIndex}] =
-            Eigen::Vector3d(pose.Pos().X(), pose.Pos().Y(), pose.Pos().Z());
-        
-        if (xIndex == 0 && yIndex == 0) {
-          centre = Eigen::Vector3d(pose.Pos().X(), pose.Pos().Y(), pose.Pos().Z());
+          int xIndex = 0;
+          int yIndex = 0;
+          if (ParseMassLinkName(link->GetName(), xIndex, yIndex)) {
+            this->positions[{xIndex, yIndex}] =
+                Eigen::Vector3d(pose.Pos().X(), pose.Pos().Y(), pose.Pos().Z());
+            
+            if (xIndex == 0 && yIndex == 0) {
+              centre = Eigen::Vector3d(pose.Pos().X(), pose.Pos().Y(), pose.Pos().Z());
+            }
+          }
         }
-      }
-    }
 
-
-    stream << "Skyweave link positions grid:" << std::endl;
-    for (int y = -this->side_links/2; y <= this->side_links/2; ++y) {
-      for (int x = -this->side_links/2; x <= this->side_links/2; ++x) {
-        auto it = this->positions.find({x, y});
-        if (it != this->positions.end()) {
-          Eigen::Vector3d& pos = it->second;
-          pos -= centre; // make it a "offset from centre"
-          // stream << x << ", " << y << ": " << pos << "\n\n";
-        } else {
-          // stream << "(N/A) ";
+        stream << "Skyweave link positions grid:" << std::endl;
+        for (int y = -this->side_links/2; y <= this->side_links/2; ++y) {
+          for (int x = -this->side_links/2; x <= this->side_links/2; ++x) {
+            auto it = this->positions.find({x, y});
+            if (it != this->positions.end()) {
+              Eigen::Vector3d& pos = it->second;
+              pos -= centre; // make it a "offset from centre"
+            }
+          }
         }
+      
+      
+// TODO update the state estimator with these "measurements", and make it update the model state
+        this->state_estimator->setPositionMeasurements(this->positions);
+        this->state_estimator->updateEstimations(); 
+      
       }
-      // stream << std::endl;
     }
-   // stream << size(this->pin_model->names) << " Pinocchio frames loaded.\n";
-
-    // gzmsg << stream.str();
   }
 
   physics::ModelPtr model;
@@ -198,6 +200,8 @@ class SkyweaveLinkTracker : public ModelPlugin {
   std::shared_ptr<pinocchio::Model> pin_model;
   std::shared_ptr<pinocchio::Data> pin_data;
 
+  // TODO create a state estimator instance 
+
   int num_links = 0; // the total number of links in the model
   int side_links = 0; // the number of links on one side of the model (square root of the total number of links)
   event::ConnectionPtr updateConnection;
@@ -205,6 +209,8 @@ class SkyweaveLinkTracker : public ModelPlugin {
   skyweave::FrameIndexMap frame_ids;
   double printRate = 2.0;
   double printPeriod = 0.5;
+
+  std::shared_ptr<skyweave::StateEstimator> state_estimator;
 };
 
 GZ_REGISTER_MODEL_PLUGIN(SkyweaveLinkTracker)
