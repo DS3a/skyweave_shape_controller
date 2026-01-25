@@ -13,6 +13,7 @@
 
 #include <state_estimator.hpp>
 #include <inverse_kinematics.hpp>
+#include <thrusters.hpp>
 
 #include <filesystem>
 #include <exception>
@@ -93,6 +94,7 @@ class SkyweaveLinkTracker : public ModelPlugin {
     }
 
     this->links.clear();
+    int link_count = 0;
     for (const auto& link : this->model->GetLinks()) {
       if (!link) {
         continue;
@@ -111,6 +113,9 @@ class SkyweaveLinkTracker : public ModelPlugin {
         skyweave::GridIndex index;
         if (ParseMassLinkName(name, index.first, index.second)) {
           this->frame_ids[index] = id;
+          this->gz_links_idx_map[index] = link_count;
+          this->thruster_map[index] = std::make_shared<skyweave::Thruster>(link);
+          link_count++;
         }
       }
     }
@@ -207,6 +212,8 @@ class SkyweaveLinkTracker : public ModelPlugin {
   event::ConnectionPtr updateConnection;
   common::Time lastPrintTime;
   skyweave::FrameIndexMap frame_ids;
+  std::map<skyweave::GridIndex, int> gz_links_idx_map;
+  std::map<skyweave::GridIndex, std::shared_ptr<skyweave::Thruster>> thruster_map;
   double printRate = 2.0;
   double printPeriod = 0.5;
 
