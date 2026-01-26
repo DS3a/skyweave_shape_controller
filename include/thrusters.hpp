@@ -26,7 +26,15 @@ class Thruster {
 void apply_thrusts(const std::map<skyweave::GridIndex, double>& thrust_commands,
                    const std::map<skyweave::GridIndex, Thruster>& thruster_map) {
     // TODO apply corresponding thrusts to the thrusters
-
+    for (const auto& command : thrust_commands) {
+        const auto& index = command.first;
+        const double thrust = command.second;
+        const auto thruster_it = thruster_map.find(index);
+        if (thruster_it == thruster_map.end()) {
+            continue;
+        }
+        thruster_it->second.ApplyThrust(thrust);
+    }
 }
 
 } // namespace skyweave
