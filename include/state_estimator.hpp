@@ -51,8 +51,13 @@ class StateEstimator {
   }
 
   // void SetGoalPositions(PositionMap goals) { goal_positions_ = std::move(goals); }
-  void setPositionMeasurements(PositionMap measurements) {
+  void setPositionMeasurements(PositionMap measurements, Eigen::Quaterniond centre_orientation) {
     this->position_measurements = std::move(measurements);
+    // rotate all measurements to be in the model frame
+    for (auto& [grid_index, position] : this->position_measurements) {
+      position = centre_orientation.inverse() * position;
+      // position = centre_orientation * position;
+    }
   }
 
   void setRate(double rate) {
@@ -99,7 +104,7 @@ class StateEstimator {
     
     #endif
 
-    for (int iter=0; iter<4; ++iter) {
+    for (int iter=0; iter<2; ++iter) {
       Eigen::VectorXd dq = skyweave::SolveIKStep(
           *(this->pin_model_), 
           *(this->pin_data_),

@@ -74,6 +74,7 @@ class SkyweaveLinkTracker : public ModelPlugin {
     }
 
     this->lastPrintTime = this->world->SimTime();
+    this->lastControlTime = this->world->SimTime();
     this->updateConnection = event::Events::ConnectWorldUpdateBegin(
         std::bind(&SkyweaveLinkTracker::OnUpdate, this, std::placeholders::_1));
 
@@ -140,6 +141,7 @@ class SkyweaveLinkTracker : public ModelPlugin {
   }
 
   void OnUpdate(const common::UpdateInfo& info) {
+
     // rate of the state estimator
     if (this->printPeriod > 0.0) {
       const double elapsed = (info.simTime - this->lastPrintTime).Double();
@@ -170,6 +172,19 @@ class SkyweaveLinkTracker : public ModelPlugin {
                 Eigen::Vector3d(pose.Pos().X(), pose.Pos().Y(), pose.Pos().Z());
             
             if (xIndex == 0 && yIndex == 0) {
+              // centre_orientation = Eigen::Quaterniond(
+              //     pose.Rot().W(), pose.Rot().X(),
+              //     pose.Rot().Y(), pose.Rot().Z());
+              centre_orientation.w() = pose.Rot().W();
+              centre_orientation.x() = pose.Rot().X();
+              centre_orientation.y() = pose.Rot().Y();
+              centre_orientation.z() = pose.Rot().Z();
+
+              stream << "Skyweave centre link orientation (quaternion): "
+                     << centre_orientation.w() << " "
+                     << centre_orientation.x() << " "
+                     << centre_orientation.y() << " "
+                     << centre_orientation.z() << std::endl;
               centre = Eigen::Vector3d(pose.Pos().X(), pose.Pos().Y(), pose.Pos().Z());
             }
           }
@@ -186,13 +201,66 @@ class SkyweaveLinkTracker : public ModelPlugin {
           }
         }
       
-      
-// TODO update the state estimator with these "measurements", and make it update the model state
-        this->state_estimator->setPositionMeasurements(this->positions);
+        this->state_estimator->setPositionMeasurements(this->positions, this->centre_orientation);
         this->state_estimator->updateEstimations(); 
-      
+        // gzmsg << stream.str();
       }
+      double elapsed_control = (info.simTime - this->lastControlTime).Double();
+      if (elapsed_control < this->controlPeriod) {
+        // return;
+      } else {
+        this->lastControlTime = info.simTime;
+
+        // Apply thruster forces
+std::map<std::pair<int, int>, double> u_dict = {
+    {std::make_pair(-2, -2), 0.003553},
+    {std::make_pair(-2, -1), 0.227782},
+    {std::make_pair(-2, 0), 0.078480},
+    {std::make_pair(-2, 1), -0.070822},
+    {std::make_pair(-2, 2), 0.153407},
+    {std::make_pair(-1, -2), 0.195711},
+    {std::make_pair(-1, -1), -0.154498},
+    {std::make_pair(-1, 0), 0.078480},
+    {std::make_pair(-1, 1), 0.311458},
+    {std::make_pair(-1, 2), -0.038751},
+    {std::make_pair(0, -2), -0.078480},
+    {std::make_pair(0, -1), -0.078480},
+    {std::make_pair(0, 0), -0.078480},
+    {std::make_pair(0, 1), -0.078480},
+    {std::make_pair(0, 2), -0.078480},
+    {std::make_pair(1, -2), -0.038751},
+    {std::make_pair(1, -1), 0.311458},
+    {std::make_pair(1, 0), 0.078480},
+    {std::make_pair(1, 1), -0.154498},
+    {std::make_pair(1, 2), 0.195711},
+    {std::make_pair(2, -2), 0.153407},
+    {std::make_pair(2, -1), -0.070822},
+    {std::make_pair(2, 0), 0.078480},
+    {std::make_pair(2, 1), 0.227782},
+    {std::make_pair(2, 2), 0.003553},
+};
+ 
+ 
+ 
+ 
+ 
+ 
+ 
+ 
+ 
+ 
+ 
+ 
+ 
+
+
+        this->thruster_commands.clear();
+        this->thruster_commands = u_dict;
+      }      
     }
+
+
+    skyweave::apply_thrusts(this->thruster_commands, this->thruster_map);
   }
 
   physics::ModelPtr model;
@@ -201,6 +269,7 @@ class SkyweaveLinkTracker : public ModelPlugin {
   std::vector<physics::LinkPtr> links;
   // std::map<skyweave::GridIndex, Eigen::Vector3d> positions;
   skyweave::PositionMap positions;
+  Eigen::Quaterniond centre_orientation;
 
   std::shared_ptr<pinocchio::Model> pin_model;
   std::shared_ptr<pinocchio::Data> pin_data;
@@ -211,11 +280,16 @@ class SkyweaveLinkTracker : public ModelPlugin {
   int side_links = 0; // the number of links on one side of the model (square root of the total number of links)
   event::ConnectionPtr updateConnection;
   common::Time lastPrintTime;
+  common::Time lastControlTime;
   skyweave::FrameIndexMap frame_ids;
   std::map<skyweave::GridIndex, int> gz_links_idx_map;
   std::map<skyweave::GridIndex, std::shared_ptr<skyweave::Thruster>> thruster_map;
+  std::map<skyweave::GridIndex, double> thruster_commands;
   double printRate = 2.0;
   double printPeriod = 0.5;
+
+  double controlRate = 50.0;
+  double controlPeriod = 0.02;
 
   std::shared_ptr<skyweave::StateEstimator> state_estimator;
 };

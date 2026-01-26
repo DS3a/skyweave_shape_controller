@@ -16,7 +16,7 @@ Example usage inside a model SDF:
 ```xml
 <plugin name="skyweave_link_tracker" filename="libskyweave_link_tracker.so">
   <print_rate>2.0</print_rate>
-  <link_name_prefix>link_</link_name_prefix>
+  <link_name_prefix>mass_</link_name_prefix>
 </plugin>
 ```
 
