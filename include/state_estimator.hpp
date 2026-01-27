@@ -104,7 +104,7 @@ class StateEstimator {
     
     #endif
 
-    for (int iter=0; iter<2; ++iter) {
+    for (int iter=0; iter<3; ++iter) {
       Eigen::VectorXd dq = skyweave::SolveIKStep(
           *(this->pin_model_), 
           *(this->pin_data_),

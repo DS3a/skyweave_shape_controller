@@ -141,6 +141,7 @@ class SkyweaveLinkTracker : public ModelPlugin {
   }
 
   void OnUpdate(const common::UpdateInfo& info) {
+    // TODO calculate the spring forces and apply the torques on the links based on the model
 
     // rate of the state estimator
     if (this->printPeriod > 0.0) {
@@ -213,46 +214,32 @@ class SkyweaveLinkTracker : public ModelPlugin {
 
         // Apply thruster forces
 std::map<std::pair<int, int>, double> u_dict = {
-    {std::make_pair(-2, -2), 0.003553},
-    {std::make_pair(-2, -1), 0.227782},
-    {std::make_pair(-2, 0), 0.078480},
-    {std::make_pair(-2, 1), -0.070822},
-    {std::make_pair(-2, 2), 0.153407},
-    {std::make_pair(-1, -2), 0.195711},
-    {std::make_pair(-1, -1), -0.154498},
-    {std::make_pair(-1, 0), 0.078480},
-    {std::make_pair(-1, 1), 0.311458},
-    {std::make_pair(-1, 2), -0.038751},
-    {std::make_pair(0, -2), -0.078480},
-    {std::make_pair(0, -1), -0.078480},
-    {std::make_pair(0, 0), -0.078480},
-    {std::make_pair(0, 1), -0.078480},
-    {std::make_pair(0, 2), -0.078480},
-    {std::make_pair(1, -2), -0.038751},
-    {std::make_pair(1, -1), 0.311458},
-    {std::make_pair(1, 0), 0.078480},
-    {std::make_pair(1, 1), -0.154498},
-    {std::make_pair(1, 2), 0.195711},
-    {std::make_pair(2, -2), 0.153407},
-    {std::make_pair(2, -1), -0.070822},
-    {std::make_pair(2, 0), 0.078480},
-    {std::make_pair(2, 1), 0.227782},
-    {std::make_pair(2, 2), 0.003553},
+    {std::make_pair(-2, -2), 0.230255},
+    {std::make_pair(-2, -1), -0.118998},
+    {std::make_pair(-2, 0), -0.539006},
+    {std::make_pair(-2, 1), -0.118998},
+    {std::make_pair(-2, 2), 0.230255},
+    {std::make_pair(-1, -2), 0.617066},
+    {std::make_pair(-1, -1), 1.636116},
+    {std::make_pair(-1, 0), 1.194420},
+    {std::make_pair(-1, 1), 1.636116},
+    {std::make_pair(-1, 2), 0.617066},
+    {std::make_pair(0, -2), 1.411092},
+    {std::make_pair(0, -1), 11.157848},
+    {std::make_pair(0, 0), 0.000000},
+    {std::make_pair(0, 1), 11.157848},
+    {std::make_pair(0, 2), 1.411092},
+    {std::make_pair(1, -2), 0.617066},
+    {std::make_pair(1, -1), 1.636116},
+    {std::make_pair(1, 0), 1.194420},
+    {std::make_pair(1, 1), 1.636116},
+    {std::make_pair(1, 2), 0.617066},
+    {std::make_pair(2, -2), 0.230255},
+    {std::make_pair(2, -1), -0.118998},
+    {std::make_pair(2, 0), -0.539006},
+    {std::make_pair(2, 1), -0.118998},
+    {std::make_pair(2, 2), 0.230255},
 };
- 
- 
- 
- 
- 
- 
- 
- 
- 
- 
- 
- 
- 
-
 
         this->thruster_commands.clear();
         this->thruster_commands = u_dict;
