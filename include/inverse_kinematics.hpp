@@ -7,7 +7,9 @@
 
 #include <Eigen/Core>
 
+#include <memory>
 #include <map>
+#include <cmath>
 #include <stdexcept>
 #include <utility>
 #include <vector>
@@ -234,8 +236,64 @@ inline Eigen::VectorXd SolveIKStep(const pinocchio::Model& model,
   return sol.head(num_vars);
 }
 
-class ConstrainedIKSolver() {
+class ConstrainedIKSolver {
+ public:
+  ConstrainedIKSolver(std::shared_ptr<pinocchio::Model> pin_model,
+                      const FrameIndexMap& frame_ids)
+      : pin_model_(pin_model),
+        joint_positions_(pin_model_->nq),
+        dq_(pin_model_->nv),
+        frame_ids_(frame_ids) {
+    if (!pin_model_) {
+      throw std::invalid_argument("pin_model must not be null");
+    }
 
+    pin_data_ = std::make_shared<pinocchio::Data>(*pin_model_);
+    joint_positions_ = pinocchio::neutral(*pin_model_);
+    dq_.setZero();
+
+    const int num_links = static_cast<int>(pin_model_->names.size());
+    num_elements_x_ = static_cast<int>(std::sqrt(num_links));
+    num_elements_y_ = num_elements_x_;
+    constraints_ = BuildConstraintFrames(num_elements_x_, num_elements_y_);
+  }
+
+  void setInitialJointPositions(const Eigen::VectorXd& q) {
+    if (q.size() != joint_positions_.size()) {
+      throw std::invalid_argument("Initial joint position size mismatch");
+    }
+    joint_positions_ = q;
+  }
+
+  void Solve(const PositionMap& goals, int iterations) {
+    if (goals.empty()) {
+      throw std::invalid_argument("Goal positions must be set before solving");
+    }
+    if (iterations < 1) {
+      throw std::invalid_argument("Iteration count must be at least 1");
+    }
+
+    goal_positions_ = goals;
+
+    for (int iter = 0; iter < iterations; ++iter) {
+      dq_ = skyweave::SolveIKStep(*pin_model_, *pin_data_, joint_positions_,
+                                 constraints_, goal_positions_, frame_ids_);
+      joint_positions_ =
+          pinocchio::integrate(*pin_model_, joint_positions_, dq_);
+    }
+  }
+
+  Eigen::VectorXd CurrentJointPositions() const { return joint_positions_; }
+
+  std::shared_ptr<pinocchio::Model> pin_model_;
+  std::shared_ptr<pinocchio::Data> pin_data_;
+  int num_elements_x_ = 0;
+  int num_elements_y_ = 0;
+  std::vector<ConstraintPair> constraints_;
+  FrameIndexMap frame_ids_;
+  PositionMap goal_positions_;
+  Eigen::VectorXd joint_positions_;
+  Eigen::VectorXd dq_;
 };
 
 }  // namespace skyweave
