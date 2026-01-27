@@ -73,8 +73,8 @@ class Springs {
   Springs(const pinocchio::Model& model,
           const skyweave::FrameIndexMap& frame_ids,
           const std::map<skyweave::GridIndex, int>& gz_links_idx_map,
-          const std::vector<physics::LinkPtr>& links,
-          double k_rot = 0.5)
+          const std::vector<gazebo::physics::LinkPtr>& links,
+          double k_rot = 0.00005)
       : model_(model),
         data_(model),
         frame_ids_(frame_ids),
@@ -98,6 +98,7 @@ class Springs {
       for (const auto& neighbor : GetNeighbors(key)) {
         const pinocchio::FrameIndex neighbor_id = frame_ids_.at(neighbor);
         const Eigen::Matrix3d R_j = data_.oMf[neighbor_id].rotation();
+        // const Eigen::Vector3d delta = pinocchio::log3(R_i.transpose() * R_j);
         const Eigen::Vector3d delta = pinocchio::log3(R_j.transpose() * R_i);
         delta_sum += S * delta;
       }
@@ -106,7 +107,7 @@ class Springs {
           model_, data_, frame_id, pinocchio::ReferenceFrame::WORLD);
       const Eigen::MatrixXd Jw = J.middleRows(3, 3);
       tau_stiff += Jw.transpose() * delta_sum;
-      link_torques[key] = delta_sum;
+      link_torques[key] = tau_stiff;
     }
 
     return link_torques;
@@ -123,11 +124,11 @@ class Springs {
       if (link_index < 0 || static_cast<std::size_t>(link_index) >= links_.size()) {
         continue;
       }
-      const physics::LinkPtr& link = links_[link_index];
+      const gazebo::physics::LinkPtr& link = links_[link_index];
       if (!link) {
         continue;
       }
-      link->AddTorque(ignition::math::Vector3d(torque.x(), torque.y(), torque.z()));
+      link->AddRelativeTorque(ignition::math::Vector3d(torque.x(), torque.y(), torque.z()));
     }
   }
 
@@ -152,7 +153,7 @@ class Springs {
   pinocchio::Data data_;
   const skyweave::FrameIndexMap& frame_ids_;
   const std::map<skyweave::GridIndex, int>& gz_links_idx_map_;
-  const std::vector<physics::LinkPtr>& links_;
+  const std::vector<gazebo::physics::LinkPtr>& links_;
   double k_rot_;
 };
 }  // namespace skyweave_sim

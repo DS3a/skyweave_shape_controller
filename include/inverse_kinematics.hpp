@@ -234,5 +234,8 @@ inline Eigen::VectorXd SolveIKStep(const pinocchio::Model& model,
   return sol.head(num_vars);
 }
 
+class ConstrainedIKSolver() {
+
+};
 
 }  // namespace skyweave

@@ -181,6 +181,9 @@ class StateEstimator {
 
   }
 
+  Eigen::VectorXd CurrentJointPositions() const { return joint_positions_; }
+  Eigen::VectorXd CurrentJointVelocities() const { return joint_velocities_; }
+
   // const PositionMap& GoalPositions() const { return goal_positions_; }
 
   void UpdateLinkPosition(int x, int y, const Eigen::Vector3d& position) {

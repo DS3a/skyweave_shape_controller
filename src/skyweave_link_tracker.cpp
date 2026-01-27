@@ -14,6 +14,7 @@
 #include <state_estimator.hpp>
 #include <inverse_kinematics.hpp>
 #include <thrusters.hpp>
+#include <skyweave_sim.hpp>
 
 #include <filesystem>
 #include <exception>
@@ -85,6 +86,10 @@ class SkyweaveLinkTracker : public ModelPlugin {
     this->side_links = static_cast<int>(std::sqrt(this->num_links));
     gzmsg << "SkyweaveLinkTracker loaded with " << this->links.size()
           << " links." << std::endl;
+
+    this->springs = std::make_shared<skyweave_sim::Springs>(
+        *(this->pin_model), this->frame_ids, this->gz_links_idx_map,
+        this->links, /*k_rot=*/0.5);
   }
 
  private:
@@ -143,6 +148,11 @@ class SkyweaveLinkTracker : public ModelPlugin {
   void OnUpdate(const common::UpdateInfo& info) {
     // TODO calculate the spring forces and apply the torques on the links based on the model
 
+    // this->springs->ApplySpringTorques(
+    //     this->springs->CalculateSpringTorques(
+    //         this->state_estimator->CurrentJointPositions()
+    //     )
+    // );
     // rate of the state estimator
     if (this->printPeriod > 0.0) {
       const double elapsed = (info.simTime - this->lastPrintTime).Double();
@@ -212,32 +222,32 @@ class SkyweaveLinkTracker : public ModelPlugin {
       } else {
         this->lastControlTime = info.simTime;
 
-        std::map<std::pair<int, int>, double> u_dict = {
-    {std::make_pair(-2, -2), 0.655460},
-    {std::make_pair(-2, -1), -1.362999},
-    {std::make_pair(-2, 0), 0.378113},
-    {std::make_pair(-2, 1), 1.614327},
-    {std::make_pair(-2, 2), 0.035285},
-    {std::make_pair(-1, -2), 0.524370},
-    {std::make_pair(-1, -1), 0.744247},
-    {std::make_pair(-1, 0), 3.255820},
-    {std::make_pair(-1, 1), -2.090591},
-    {std::make_pair(-1, 2), 0.711833},
-    {std::make_pair(0, -2), 1.515747},
-    {std::make_pair(0, -1), 3.288455},
+std::map<std::pair<int, int>, double> u_dict = {
+    {std::make_pair(-2, -2), 0.067391},
+    {std::make_pair(-2, -1), 0.141025},
+    {std::make_pair(-2, 0), -0.086811},
+    {std::make_pair(-2, 1), 0.141025},
+    {std::make_pair(-2, 2), 0.067391},
+    {std::make_pair(-1, -2), 0.199421},
+    {std::make_pair(-1, -1), 0.862275},
+    {std::make_pair(-1, 0), 0.040547},
+    {std::make_pair(-1, 1), 0.862275},
+    {std::make_pair(-1, 2), 0.199421},
+    {std::make_pair(0, -2), 0.415352},
+    {std::make_pair(0, -1), 5.970946},
     {std::make_pair(0, 0), 0.000000},
-    {std::make_pair(0, 1), 3.288455},
-    {std::make_pair(0, 2), 1.515747},
-    {std::make_pair(1, -2), 0.711833},
-    {std::make_pair(1, -1), -2.090591},
-    {std::make_pair(1, 0), 3.255820},
-    {std::make_pair(1, 1), 0.744247},
-    {std::make_pair(1, 2), 0.524370},
-    {std::make_pair(2, -2), 0.035285},
-    {std::make_pair(2, -1), 1.614327},
-    {std::make_pair(2, 0), 0.378113},
-    {std::make_pair(2, 1), -1.362999},
-    {std::make_pair(2, 2), 0.655460},
+    {std::make_pair(0, 1), 5.970946},
+    {std::make_pair(0, 2), 0.415352},
+    {std::make_pair(1, -2), 0.199421},
+    {std::make_pair(1, -1), 0.862275},
+    {std::make_pair(1, 0), 0.040547},
+    {std::make_pair(1, 1), 0.862275},
+    {std::make_pair(1, 2), 0.199421},
+    {std::make_pair(2, -2), 0.067391},
+    {std::make_pair(2, -1), 0.141025},
+    {std::make_pair(2, 0), -0.086811},
+    {std::make_pair(2, 1), 0.141025},
+    {std::make_pair(2, 2), 0.067391},
 };
 
 
@@ -260,6 +270,7 @@ class SkyweaveLinkTracker : public ModelPlugin {
 
   std::shared_ptr<pinocchio::Model> pin_model;
   std::shared_ptr<pinocchio::Data> pin_data;
+  std::shared_ptr<skyweave_sim::Springs> springs;
 
   // TODO create a state estimator instance 
 
