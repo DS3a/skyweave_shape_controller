@@ -212,34 +212,34 @@ class SkyweaveLinkTracker : public ModelPlugin {
       } else {
         this->lastControlTime = info.simTime;
 
-        // Apply thruster forces
-std::map<std::pair<int, int>, double> u_dict = {
-    {std::make_pair(-2, -2), 0.230255},
-    {std::make_pair(-2, -1), -0.118998},
-    {std::make_pair(-2, 0), -0.539006},
-    {std::make_pair(-2, 1), -0.118998},
-    {std::make_pair(-2, 2), 0.230255},
-    {std::make_pair(-1, -2), 0.617066},
-    {std::make_pair(-1, -1), 1.636116},
-    {std::make_pair(-1, 0), 1.194420},
-    {std::make_pair(-1, 1), 1.636116},
-    {std::make_pair(-1, 2), 0.617066},
-    {std::make_pair(0, -2), 1.411092},
-    {std::make_pair(0, -1), 11.157848},
+        std::map<std::pair<int, int>, double> u_dict = {
+    {std::make_pair(-2, -2), 0.655460},
+    {std::make_pair(-2, -1), -1.362999},
+    {std::make_pair(-2, 0), 0.378113},
+    {std::make_pair(-2, 1), 1.614327},
+    {std::make_pair(-2, 2), 0.035285},
+    {std::make_pair(-1, -2), 0.524370},
+    {std::make_pair(-1, -1), 0.744247},
+    {std::make_pair(-1, 0), 3.255820},
+    {std::make_pair(-1, 1), -2.090591},
+    {std::make_pair(-1, 2), 0.711833},
+    {std::make_pair(0, -2), 1.515747},
+    {std::make_pair(0, -1), 3.288455},
     {std::make_pair(0, 0), 0.000000},
-    {std::make_pair(0, 1), 11.157848},
-    {std::make_pair(0, 2), 1.411092},
-    {std::make_pair(1, -2), 0.617066},
-    {std::make_pair(1, -1), 1.636116},
-    {std::make_pair(1, 0), 1.194420},
-    {std::make_pair(1, 1), 1.636116},
-    {std::make_pair(1, 2), 0.617066},
-    {std::make_pair(2, -2), 0.230255},
-    {std::make_pair(2, -1), -0.118998},
-    {std::make_pair(2, 0), -0.539006},
-    {std::make_pair(2, 1), -0.118998},
-    {std::make_pair(2, 2), 0.230255},
+    {std::make_pair(0, 1), 3.288455},
+    {std::make_pair(0, 2), 1.515747},
+    {std::make_pair(1, -2), 0.711833},
+    {std::make_pair(1, -1), -2.090591},
+    {std::make_pair(1, 0), 3.255820},
+    {std::make_pair(1, 1), 0.744247},
+    {std::make_pair(1, 2), 0.524370},
+    {std::make_pair(2, -2), 0.035285},
+    {std::make_pair(2, -1), 1.614327},
+    {std::make_pair(2, 0), 0.378113},
+    {std::make_pair(2, 1), -1.362999},
+    {std::make_pair(2, 2), 0.655460},
 };
+
 
         this->thruster_commands.clear();
         this->thruster_commands = u_dict;
@@ -269,7 +269,7 @@ std::map<std::pair<int, int>, double> u_dict = {
   common::Time lastPrintTime;
   common::Time lastControlTime;
   skyweave::FrameIndexMap frame_ids;
-  std::map<skyweave::GridIndex, int> gz_links_idx_map;
+  std::map<skyweave::GridIndex, int> gz_links_idx_map; // the map from the grid index to the gazebo link index
   std::map<skyweave::GridIndex, std::shared_ptr<skyweave::Thruster>> thruster_map;
   std::map<skyweave::GridIndex, double> thruster_commands;
   double printRate = 2.0;
