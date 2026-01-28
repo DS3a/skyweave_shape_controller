@@ -183,6 +183,7 @@ class StateEstimator {
 
   Eigen::VectorXd CurrentJointPositions() const { return joint_positions_; }
   Eigen::VectorXd CurrentJointVelocities() const { return joint_velocities_; }
+  const FrameIndexMap& FrameIds() const { return frame_ids_; }
 
   // const PositionMap& GoalPositions() const { return goal_positions_; }
 
