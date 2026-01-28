@@ -80,7 +80,9 @@ class Springs {
         frame_ids_(frame_ids),
         gz_links_idx_map_(gz_links_idx_map),
         links_(links),
-        k_rot_(k_rot) {}
+        k_rot_(k_rot) {
+          this->generalized_spring_forces_ = Eigen::VectorXd::Zero(this->model_.nv);
+        }
 
   std::map<skyweave::GridIndex, Eigen::Vector3d> CalculateSpringTorques(
       const Eigen::VectorXd& q_state) {
@@ -88,7 +90,8 @@ class Springs {
     pinocchio::updateFramePlacements(model_, data_);
 
     const Eigen::Matrix3d S = Eigen::Matrix3d::Identity() * k_rot_;
-    Eigen::VectorXd tau_stiff = Eigen::VectorXd::Zero(model_.nv);
+    // Eigen::VectorXd tau_stiff = Eigen::VectorXd::Zero(model_.nv);
+    this->generalized_spring_forces_.setZero();
     std::map<skyweave::GridIndex, Eigen::Vector3d> link_torques;
 
     for (const auto& [key, frame_id] : frame_ids_) {
@@ -106,11 +109,16 @@ class Springs {
       const Eigen::MatrixXd J = pinocchio::getFrameJacobian(
           model_, data_, frame_id, pinocchio::ReferenceFrame::WORLD);
       const Eigen::MatrixXd Jw = J.middleRows(3, 3);
-      tau_stiff += Jw.transpose() * delta_sum;
-      link_torques[key] = tau_stiff;
+      // tau_stiff += Jw.transpose() * delta_sum;
+      this->generalized_spring_forces_ += Jw.transpose() * delta_sum;
+      link_torques[key] = delta_sum;
     }
 
     return link_torques;
+  }
+
+  Eigen::VectorXd getGeneralizedSpringForces() const {
+    return this->generalized_spring_forces_;
   }
 
   void ApplySpringTorques(
@@ -155,5 +163,6 @@ class Springs {
   const std::map<skyweave::GridIndex, int>& gz_links_idx_map_;
   const std::vector<gazebo::physics::LinkPtr>& links_;
   double k_rot_;
+  Eigen::VectorXd generalized_spring_forces_;
 };
 }  // namespace skyweave_sim

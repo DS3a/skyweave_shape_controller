@@ -4,7 +4,7 @@
 #include <utility>
 #include <Eigen/Core>
 
-#define PI 3.141592653589793
+#define PI 3.141592653589793f
 
 namespace skyweave {
 
@@ -22,15 +22,15 @@ class GammaSurface {
     GammaSurface() = default;
     ~GammaSurface() = default;
 
-    void Initialize() {
-    // parameters to accept
-    // side length of the model
-    // number of elements in each side
-    
+    void Initialize(float side_length, int num_elements) {
+        // parameters to accept
+        // side length of the model
+        // number of elements in each side
+        this->side_length_ = side_length;
+        this->num_elements_ = num_elements;
 
-    // after accepting everything, calculate element distance
-
-    // Initialization code here
+        // after accepting everything, calculate element distance
+        this->element_distance_ = this->side_length_ / (this->num_elements_ - 1);
     }
 
 
@@ -105,7 +105,7 @@ class GammaSurface {
     float amplitude_ = 0.05f; // in meters, so this is 5cm
     float angle_ = 0.0f; // in radians
     float phase_ = 0.0f; // in radians
-    float frequency_ = 0.5f; // in Hz
+    float frequency_ = PI/0.8f; // in Hz
 
     /*parameters of the surface
      * side length

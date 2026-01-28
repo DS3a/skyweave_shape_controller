@@ -1,7 +1,7 @@
 #pragma once
 
 
-#define CHECK_RMSE
+// #define CHECK_RMSE
 #include <Eigen/Core>
 
 #include <pinocchio/parsers/sdf.hpp>

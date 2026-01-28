@@ -10,6 +10,8 @@ find_package(gazebo REQUIRED)
 find_package(Eigen3 REQUIRED)
 
 find_package(pinocchio REQUIRED)
+find_package(CasADi REQUIRED)
+
 
 # Find Pinocchio using pkg-config
 find_package(PkgConfig REQUIRED)
@@ -17,6 +19,7 @@ pkg_check_modules(PINOCCHIO REQUIRED pinocchio)
 
 
 include_directories(
+                    ${CasADI_INCLUDE_DIRS}
                     ${CMAKE_CURRENT_SOURCE_DIR}/include
                     ${GAZEBO_INCLUDE_DIRS}
                     ${EIGEN3_INCLUDE_DIRS}
@@ -34,7 +37,7 @@ add_definitions(
 add_library(skyweave_link_tracker SHARED src/skyweave_link_tracker.cpp)
 
 target_link_libraries(skyweave_link_tracker PRIVATE
-            # PkgConfig::PINOCCHIO
+            casadi::casadi
             ${GAZEBO_LIBRARIES}
             ${EIGEN3_LIBRARIES}
             ${PINOCCHIO_LIBRARIES}
