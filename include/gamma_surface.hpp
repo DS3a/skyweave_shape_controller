@@ -105,14 +105,14 @@ class GammaSurface {
     float amplitude_ = 0.05f; // in meters, so this is 5cm
     float angle_ = 0.0f; // in radians
     float phase_ = 0.0f; // in radians
-    float frequency_ = PI/0.8f; // in Hz
+    float frequency_ = PI/0.4f; // in Hz
 
     /*parameters of the surface
      * side length
      * number of elements in each side
      * element distance = side length / (number of elements - 1)
      */
-    float side_length_ = 0.8f; // in meters
+    float side_length_ = 0.4f; // in meters
     int num_elements_ = 5;
     float element_distance_ = side_length_ / (num_elements_ - 1);
 

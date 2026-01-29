@@ -34,7 +34,13 @@ add_definitions(
     ${PINOCCHIO_CFLAGS_OTHER}  
     ${GAZEBO_CXX_FLAGS})
 
-add_library(skyweave_link_tracker SHARED src/skyweave_link_tracker.cpp)
+add_library(skyweave_link_tracker SHARED src/skyweave_link_tracker.cpp
+    src/gamma_surface.cpp
+    src/inverse_kinematics.cpp
+    src/state_estimator.cpp
+    src/thrusters.cpp
+    src/shape_controller.cpp
+)
 
 target_link_libraries(skyweave_link_tracker PRIVATE
             casadi::casadi

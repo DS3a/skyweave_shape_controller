@@ -35,9 +35,9 @@ public:
     Eigen::VectorXd desired_joint_acceleration_;
     Eigen::VectorXd spring_torques_;
     std::unique_ptr<skyweave::ConstrainedIKSolver> ik_solver_;
-    double kp_ = 90.0;
-    double kd_ = 50.0;
-    double ki_ = 0.1;
+    double kp_ = 50.0;
+    double kd_ = 12.0;
+    double ki_ = 0.0;
     Eigen::VectorXd integral_error_; // size nv
 
     // needs the current state (q, v) : which you can get from state estimator
@@ -86,7 +86,7 @@ public:
         // calulate v_dot as a PD controller of dq_ from ik_solver
         Eigen::VectorXd dq_ = pinocchio::difference(*(this->pin_model_), current_q, this->ik_solver_->CurrentJointPositions());
         this->integral_error_ += dq_ * 0.02; // assuming control step is 0.02s
-        v_dot = kp_ * (dq_) + kd_ * current_v + ki_ * this->integral_error_;
+        v_dot = kp_ * (dq_) - kd_ * current_v + ki_ * this->integral_error_;
 
 
         this->desired_joint_acceleration_ = v_dot;
