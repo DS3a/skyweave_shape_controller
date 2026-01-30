@@ -40,6 +40,7 @@ add_library(skyweave_link_tracker SHARED src/skyweave_link_tracker.cpp
     src/state_estimator.cpp
     src/thrusters.cpp
     src/shape_controller.cpp
+    src/skyweave_sim.cpp
 )
 
 target_link_libraries(skyweave_link_tracker PRIVATE
