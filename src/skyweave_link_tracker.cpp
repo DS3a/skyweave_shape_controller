@@ -247,7 +247,7 @@ class SkyweaveLinkTracker : public ModelPlugin {
           std::cout << " - (" << key.first << ", " << key.second << "): " << value << "\n";
         }
 
-        // std::map<std::pair<int, int>, double> u_dict = {
+        // std::map<std::pair<int, int>, double> u_dict2 = {
         //     {std::make_pair(-2, -2), 0.067391},
         //     {std::make_pair(-2, -1), 0.141025},
         //     {std::make_pair(-2, 0), -0.086811},

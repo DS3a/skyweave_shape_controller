@@ -141,8 +141,13 @@ public:
 
         }
 
+        // TODO update model gravity vector based on current orientation
+        const Eigen::VectorXd g_q = pinocchio::computeGeneralizedGravity(
+            *(this->pin_model_), this->pin_data_, this->ik_solver_->CurrentJointPositions());
 
-        const Eigen::VectorXd desired_tau = M * this->desired_joint_acceleration_ + h - this->spring_torques_;
+
+        // const Eigen::VectorXd desired_tau = M * this->desired_joint_acceleration_ + h - this->spring_torques_;
+        const Eigen::VectorXd desired_tau = g_q - this->spring_torques_;
         // std::cout << "the desired tau is: " << desired_tau.transpose() << "\n";
 
         casadi::DM A_dm = casadi::DM::zeros(nv, num_thrusters);
