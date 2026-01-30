@@ -1,4 +1,5 @@
 #include <skyweave_sim.hpp>
+#include <iostream>
 
 namespace skyweave_sim {
 
@@ -20,6 +21,7 @@ std::map<skyweave::GridIndex, Eigen::Vector3d> Springs::CalculateSpringTorques(
     const Eigen::VectorXd& q_state) {
   pinocchio::forwardKinematics(model_, data_, q_state);
   pinocchio::updateFramePlacements(model_, data_);
+  pinocchio::computeJointJacobians(model_, data_, q_state);
 
   const Eigen::Matrix3d S = Eigen::Matrix3d::Identity() * k_rot_;
   // Eigen::VectorXd tau_stiff = Eigen::VectorXd::Zero(model_.nv);
@@ -45,7 +47,6 @@ std::map<skyweave::GridIndex, Eigen::Vector3d> Springs::CalculateSpringTorques(
     this->generalized_spring_forces_ += Jw.transpose() * delta_sum;
     link_torques[key] = delta_sum;
   }
-
   return link_torques;
 }
 

@@ -3,8 +3,16 @@
 #include <map>
 #include <utility>
 #include <Eigen/Core>
+#include <pinocchio/algorithm/frames.hpp>
+#include <pinocchio/algorithm/jacobian.hpp>
+#include <pinocchio/algorithm/kinematics.hpp>
+#include <pinocchio/algorithm/model.hpp>
+#include <pinocchio/algorithm/crba.hpp>
+#include <pinocchio/algorithm/rnea.hpp>
 
-#define PI 3.141592653589793f
+#include <inverse_kinematics.hpp>
+
+// #define PI 3.141592653589793f
 
 namespace skyweave {
 
@@ -23,6 +31,8 @@ class GammaSurface {
     ~GammaSurface();
 
     void Initialize(float side_length, int num_elements);
+    void init_ik_solver(std::shared_ptr<pinocchio::Model> pin_model,
+                        const FrameIndexMap& frame_ids);
 
     Eigen::Vector3d gamma_sur(float u, float v,
                               Eigen::Vector3d base_pos = Eigen::Vector3d::Zero());
@@ -34,6 +44,8 @@ class GammaSurface {
 
     PositionMap get_goals();
 
+    Eigen::VectorXd get_goal_joint_positions();
+
   private:
     /* parameters for the gamma surface controller
      * Amplitude
@@ -44,7 +56,7 @@ class GammaSurface {
     float amplitude_ = 0.05f; // in meters, so this is 5cm
     float angle_ = 0.0f; // in radians
     float phase_ = 0.0f; // in radians
-    float frequency_ = PI/0.4f; // in Hz
+    float frequency_ = M_PI/0.4f; // in Hz
 
     /*parameters of the surface
      * side length
@@ -54,6 +66,16 @@ class GammaSurface {
     float side_length_ = 0.4f; // in meters
     int num_elements_ = 5;
     float element_distance_ = side_length_ / (num_elements_ - 1);
+
+    bool calculated_q = false;
+    // TODO add the IK solver from shape_controller to this, and calculate
+    // the q values only when the parameters are updated
+
+    std::unique_ptr<skyweave::ConstrainedIKSolver> ik_solver_;
+    std::shared_ptr<pinocchio::Model> pin_model_;
+    pinocchio::Data pin_data_;
+    PositionMap goal_positions_;
+    Eigen::VectorXd goal_joint_positions_;
 
 };
 

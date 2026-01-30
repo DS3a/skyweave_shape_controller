@@ -1,5 +1,5 @@
 #include <gamma_surface.hpp>
-
+#include <iostream>
 #include <cmath>
 
 namespace skyweave::controller {
@@ -48,13 +48,37 @@ Eigen::Vector3d GammaSurface::gamma_sur(float u, float v, Eigen::Vector3d base_p
     return Eigen::Vector3d(x, y, z);
 }
 
-void GammaSurface::update_amplitude(float amplitude) { this->amplitude_ = amplitude; }
+void GammaSurface::update_amplitude(float amplitude) {
+    if (this->amplitude_ == amplitude) {
+        return;
+    }
+    this->amplitude_ = amplitude; 
+    this->calculated_q = false;    
+}
 
-void GammaSurface::update_angle(float angle) { this->angle_ = angle; }
+void GammaSurface::update_angle(float angle) { 
+    if (this->angle_ == angle) {
+        return;
+    }
+    this->angle_ = angle; 
+    this->calculated_q = false;
+}
 
-void GammaSurface::update_phase(float phase) { this->phase_ = phase; }
+void GammaSurface::update_phase(float phase) { 
+    if (this->phase_ == phase) {
+        return;
+    }
+    this->phase_ = phase;
+    this->calculated_q = false;
+}
 
-void GammaSurface::update_frequency(float frequency) { this->frequency_ = frequency; }
+void GammaSurface::update_frequency(float frequency) { 
+    if (this->frequency_ == frequency) {
+        return;
+    }
+    this->frequency_ = frequency; 
+    this->calculated_q = false;    
+}
 
 PositionMap GammaSurface::get_goals() {
     // goal_positions = dict()
@@ -63,16 +87,42 @@ PositionMap GammaSurface::get_goals() {
     //         x, y, z = gamma_sur(i*elem_dist, j*elem_dist, A=A,
     //         base_pos=np.array([0, 0, 0]))
     //         goal_positions[(i, j)] = np.array([x, y, z])
-    PositionMap goal_positions;
-    for (int i = -num_elements_ / 2; i <= num_elements_ / 2; ++i) {
-        for (int j = -num_elements_ / 2; j <= num_elements_ / 2; ++j) {
-            float u = i * element_distance_;
-            float v = j * element_distance_;
-            Eigen::Vector3d pos = gamma_sur(u, v, Eigen::Vector3d::Zero());
-            goal_positions[{i, j}] = pos;
+    // PositionMap goal_positions;
+    if (!this->calculated_q) {
+        std::cout << "the params were changed, recalculating the goal positions and joint positions\n";
+        for (int i = -num_elements_ / 2; i <= num_elements_ / 2; ++i) {
+            for (int j = -num_elements_ / 2; j <= num_elements_ / 2; ++j) {
+                float u = i * element_distance_;
+                float v = j * element_distance_;
+                Eigen::Vector3d pos = gamma_sur(u, v, Eigen::Vector3d::Zero());
+                this->goal_positions_[{i, j}] = pos;
+            }
         }
-    }
-    return goal_positions;
+        this->goal_joint_positions_ = pinocchio::neutral(*this->pin_model_);
+        this->ik_solver_->setInitialJointPositions(
+            pinocchio::neutral(*this->pin_model_));
+        this->ik_solver_->Solve(this->goal_positions_, 5);
+        this->goal_joint_positions_ = this->ik_solver_->CurrentJointPositions();
+        this->calculated_q = true;
+
+    } // if it is already calculated then just return the previously calculated stuff
+    return this->goal_positions_;
+}
+
+Eigen::VectorXd GammaSurface::get_goal_joint_positions() {
+    return this->goal_joint_positions_;
+}
+
+void GammaSurface::init_ik_solver(std::shared_ptr<pinocchio::Model> pin_model,
+                                 const FrameIndexMap& frame_ids) {
+
+    this->pin_model_ = pin_model;
+    this->pin_data_ = pinocchio::Data(*this->pin_model_);
+    this->ik_solver_ =
+        std::make_unique<skyweave::ConstrainedIKSolver>(this->pin_model_, frame_ids);
+
+    this->goal_joint_positions_ = pinocchio::neutral(*this->pin_model_);
+
 }
 
 }  // namespace skyweave::controller

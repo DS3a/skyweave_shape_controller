@@ -91,7 +91,7 @@ class SkyweaveLinkTracker : public ModelPlugin {
 
     this->springs = std::make_shared<skyweave_sim::Springs>(
         *(this->pin_model), this->frame_ids, this->gz_links_idx_map,
-        this->links, /*k_rot=*/1.0);
+        this->links, /*k_rot=*/0.5);
 
     this->gamma_surface = std::make_shared<skyweave::controller::GammaSurface>();
     this->shape_controller = std::make_shared<skyweave::controller::ShapeController>(
@@ -228,14 +228,26 @@ class SkyweaveLinkTracker : public ModelPlugin {
       } else {
         this->lastControlTime = info.simTime;
 
-        this->springs->CalculateSpringTorques(
-            this->state_estimator->CurrentJointPositions()
-        );
+        // this->springs->CalculateSpringTorques(
+        //     this->state_estimator->CurrentJointPositions()
+        // );
+
 
         // set the desired shape in gamma surface
-        this->gamma_surface->update_amplitude(0.2); // 0.05 meter amplitude
-        this->gamma_surface->update_angle(0); // 90 degrees
+        this->gamma_surface->update_amplitude(0.05); // 0.05 meter amplitude
+        if (info.simTime < common::Time(10, 0)) {
+          this->gamma_surface->update_angle(M_PI/2);
+        } else if (info.simTime < common::Time(15, 0)) {
+          this->gamma_surface->update_angle(0);
+        } else {
+          this->gamma_surface->update_amplitude(0.01); // reduce amplitude to 1 cm
+          this->gamma_surface->update_angle(M_PI/4);
+        }
+        // this->gamma_surface->update_angle(M_PI/2); // 90 degrees
         this->gamma_surface->update_phase(M_PI);
+        this->springs->CalculateSpringTorques(
+          this->shape_controller->gamma_surface_->get_goal_joint_positions()
+        );
 
         this->shape_controller->setSpringTorques(
             this->springs->getGeneralizedSpringForces()

@@ -21,6 +21,9 @@ ShapeController::ShapeController(
   this->spring_torques_ = Eigen::VectorXd::Zero(this->pin_model_->nv);
   this->ik_solver_ = std::make_unique<skyweave::ConstrainedIKSolver>(
       pin_model_, state_estimator_->FrameIds());
+
+  this->gamma_surface_->init_ik_solver(
+      pin_model_, state_estimator_->FrameIds());
 }
 
 void ShapeController::setSpringTorques(const Eigen::VectorXd& spring_torques) {
@@ -43,16 +46,21 @@ void ShapeController::ComputeRequiredJointPosAndAccel() {
   // have noticed that the IK solver converges better when starting from neutral instead
   // of current_q
 
-  this->ik_solver_->setInitialJointPositions(current_q);
+  // this->ik_solver_->setInitialJointPositions(current_q);
   goal_positions = this->gamma_surface_->get_goals();
-  this->ik_solver_->Solve(goal_positions, 3);
+  // this->ik_solver_->Solve(goal_positions, 3);
+
 
   Eigen::VectorXd v_dot = Eigen::VectorXd::Zero(current_v.size());
   // calulate v_dot as a PD controller of dq_ from ik_solver
+
   Eigen::VectorXd dq_ = pinocchio::difference(
-      *(this->pin_model_), current_q, this->ik_solver_->CurrentJointPositions());
+      *(this->pin_model_), current_q, this->gamma_surface_->get_goal_joint_positions());
   this->integral_error_ += dq_ * 0.02;  // assuming control step is 0.02s
   v_dot = kp_ * (dq_) - kd_ * current_v + ki_ * this->integral_error_;
+
+  // std::cout << "computed required joint positions: "
+            // << this->gamma_surface_->get_goal_joint_positions().transpose() << "\n";
 
   this->desired_joint_acceleration_ = v_dot;
 }
@@ -67,19 +75,21 @@ std::map<skyweave::GridIndex, double> ShapeController::ComputeControlStep() {
   Eigen::VectorXd current_q = this->state_estimator_->CurrentJointPositions();
   Eigen::VectorXd current_v = this->state_estimator_->CurrentJointVelocities();
 
-  pinocchio::crba(*(this->pin_model_), this->pin_data_, current_q);
-  Eigen::MatrixXd M = this->pin_data_.M;
-  M.triangularView<Eigen::StrictlyLower>() =
-      M.transpose().triangularView<Eigen::StrictlyLower>();
+  // pinocchio::crba(*(this->pin_model_), this->pin_data_, current_q);
+  // Eigen::MatrixXd M = this->pin_data_.M;
+  // M.triangularView<Eigen::StrictlyLower>() =
+  //     M.transpose().triangularView<Eigen::StrictlyLower>();
 
-  pinocchio::nonLinearEffects(*(this->pin_model_), this->pin_data_, current_q,
-                              current_v);
-  Eigen::VectorXd h = this->pin_data_.nle;
-  (void)h;
+  // pinocchio::nonLinearEffects(*(this->pin_model_), this->pin_data_, current_q,
+  //                             current_v);
+  // Eigen::VectorXd h = this->pin_data_.nle;
+  // (void)h;
 
   if (this->spring_torques_.size() != this->pin_model_->nv) {
     this->spring_torques_ = Eigen::VectorXd::Zero(this->pin_model_->nv);
   }
+
+  current_q = this->gamma_surface_->get_goal_joint_positions(); // this is just for gravity compenstaian
 
   pinocchio::forwardKinematics(*(this->pin_model_), this->pin_data_, current_q,
                                current_v);
@@ -99,12 +109,12 @@ std::map<skyweave::GridIndex, double> ShapeController::ComputeControlStep() {
     ordered_indices.push_back(index);
     const Eigen::MatrixXd J = pinocchio::getFrameJacobian(
         *(this->pin_model_), this->pin_data_, frame_id,
-        pinocchio::ReferenceFrame::LOCAL);
-    // const Eigen::MatrixXd J_trans = J.topRows(3);
+        pinocchio::ReferenceFrame::WORLD);
+    const Eigen::MatrixXd J_trans = J.topRows(3);
     // const Eigen::Matrix3d R = this->pin_data_.oMf[frame_id].rotation();
     // const Eigen::Vector3d force_world = R * Eigen::Vector3d(0.0, 0.0, 1.0);
-    // A.col(col) = J_trans.transpose() * Eigen::Vector3d(0.0, 0.0, 1.0);
-    A.col(col) = J.row(2).transpose();  // only the z thrust
+    A.col(col) = J_trans.transpose() * Eigen::Vector3d(0.0, 0.0, 1.0);
+    // A.col(col) = J.row(2).transpose();  // only the z thrust
     // std::cout << "the jacobian is " << J_trans << "\n";
     ++col;
   }
@@ -112,7 +122,8 @@ std::map<skyweave::GridIndex, double> ShapeController::ComputeControlStep() {
   // TODO update model gravity vector based on current orientation
   const Eigen::VectorXd g_q = pinocchio::computeGeneralizedGravity(
       *(this->pin_model_), this->pin_data_,
-      this->ik_solver_->CurrentJointPositions());
+      // this->ik_solver_->CurrentJointPositions());
+      current_q);
 
   // const Eigen::VectorXd desired_tau =
   //     M * this->desired_joint_acceleration_ + h - this->spring_torques_;
@@ -140,7 +151,7 @@ std::map<skyweave::GridIndex, double> ShapeController::ComputeControlStep() {
 
   // casadi::MX residual = A_dm * u - b_dm;
   casadi::MX residual = mtimes(A_dm, u) - b_dm;
-  std::cout << "computed residual\n";
+  // std::cout << "computed residual\n";
   // casadi::MX residual = casadi::mtimes(A_dm, u) - b_dm;
   // casadi::MX objective = casadi::sumsqr(residual, residual);
   casadi::MX objective = 0.5 * sumsqr(residual);
