@@ -140,14 +140,6 @@ std::map<skyweave::GridIndex, double> ShapeController::ComputeControlStep() {
   const Eigen::VectorXd desired_tau =
       M * this->desired_joint_acceleration_ + h - this->spring_torques_;
 
-  // Solve M * v_dot = A * u - h + spring_torques so constraints can reason about
-  // accelerations as an explicit affine function of thruster inputs.
-  // The LDLT factorization of the symmetric mass matrix provides a stable solve
-  // without explicitly forming M^{-1}.
-  Eigen::LDLT<Eigen::MatrixXd> mass_solver(M);
-  const Eigen::MatrixXd acceleration_map = mass_solver.solve(A);
-  const Eigen::VectorXd acceleration_bias =
-      mass_solver.solve(-h + this->spring_torques_);
 
 
   // const Eigen::VectorXd desired_tau = g_q - this->spring_torques_;
@@ -163,23 +155,6 @@ std::map<skyweave::GridIndex, double> ShapeController::ComputeControlStep() {
   casadi::DM b_dm = casadi::DM::zeros(nv, 1);
   for (int r = 0; r < nv; ++r) {
     b_dm(r) = desired_tau(r);
-  }
-
-  casadi::DM acceleration_map_dm = casadi::DM::zeros(nv, num_thrusters);
-  for (int r = 0; r < nv; ++r) {
-    for (int c = 0; c < num_thrusters; ++c) {
-      acceleration_map_dm(r, c) = acceleration_map(r, c);
-    }
-  }
-
-  casadi::DM acceleration_bias_dm = casadi::DM::zeros(nv, 1);
-  for (int r = 0; r < nv; ++r) {
-    acceleration_bias_dm(r) = acceleration_bias(r);
-  }
-
-  casadi::DM current_v_dm = casadi::DM::zeros(nv, 1);
-  for (int r = 0; r < nv; ++r) {
-    current_v_dm(r) = current_v(r);
   }
 
   casadi::MX u = casadi::MX::sym("u", num_thrusters);
@@ -206,51 +181,9 @@ std::map<skyweave::GridIndex, double> ShapeController::ComputeControlStep() {
   opts["print_time"] = false;
   opts["ipopt.print_level"] = 0;
 
-  pinocchio::computeJointJacobiansTimeVariation(*(this->pin_model_),
-                                                this->pin_data_, current_q,
-                                                current_v);
-
-  std::vector<casadi::MX> constraint_entries;
-  const casadi::MX v_dot_expr =
-      mtimes(acceleration_map_dm, u) + acceleration_bias_dm;
   for (auto constraint: this->constraints_) {
     // J_1(q) * \dot{v} + \dot{J_1}(q) * v = J_2(q) * \dot{v} + \dot{J_2}(q) * v
-    const auto frame_id1 = frame_ids.at(constraint.first);
-    const auto frame_id2 = frame_ids.at(constraint.second);
-
-    const Eigen::MatrixXd J1 = pinocchio::getFrameJacobian(
-        *(this->pin_model_), this->pin_data_, frame_id1,
-        pinocchio::ReferenceFrame::WORLD);
-    const Eigen::MatrixXd J2 = pinocchio::getFrameJacobian(
-        *(this->pin_model_), this->pin_data_, frame_id2,
-        pinocchio::ReferenceFrame::WORLD);
-
-    const Eigen::MatrixXd Jdot1 = pinocchio::getFrameJacobianTimeVariation(
-        *(this->pin_model_), this->pin_data_, frame_id1,
-        pinocchio::ReferenceFrame::WORLD);
-    const Eigen::MatrixXd Jdot2 = pinocchio::getFrameJacobianTimeVariation(
-        *(this->pin_model_), this->pin_data_, frame_id2,
-        pinocchio::ReferenceFrame::WORLD);
-
-    const Eigen::MatrixXd J_rel = (J1 - J2).topRows(3);
-    const Eigen::MatrixXd Jdot_rel = (Jdot1 - Jdot2).topRows(3);
-
-    casadi::DM J_rel_dm = casadi::DM::zeros(3, nv);
-    casadi::DM Jdot_rel_dm = casadi::DM::zeros(3, nv);
-    for (int r = 0; r < 3; ++r) {
-      for (int c = 0; c < nv; ++c) {
-        J_rel_dm(r, c) = J_rel(r, c);
-        Jdot_rel_dm(r, c) = Jdot_rel(r, c);
-      }
-    }
-
-    const casadi::MX accel_constraint =
-        mtimes(J_rel_dm, v_dot_expr) + mtimes(Jdot_rel_dm, current_v_dm);
-    constraint_entries.push_back(accel_constraint);
-  }
-
-  if (!constraint_entries.empty()) {
-    nlp["g"] = vertcat(constraint_entries);
+    // TODO add these constraints to the QP
   }
 
   casadi::Function solver =
@@ -260,15 +193,8 @@ std::map<skyweave::GridIndex, double> ShapeController::ComputeControlStep() {
                   //  std::numeric_limits<double>::infinity();
   // casadi::DM ubx = casadi::DM::ones(num_thrusters, 1) * 1;
                   //  std::numeric_limits<double>::infinity();
-  casadi::DMDict solver_args{{"x0", casadi::DM::zeros(num_thrusters, 1)}};
-  if (!constraint_entries.empty()) {
-    const int constraint_count =
-        static_cast<int>(constraint_entries.size()) * 3;
-    solver_args["lbg"] = casadi::DM::zeros(constraint_count, 1);
-    solver_args["ubg"] = casadi::DM::zeros(constraint_count, 1);
-  }
-
-  casadi::DMDict solution = solver(solver_args);
+  casadi::DMDict solution =
+      solver(casadi::DMDict{{"x0", casadi::DM::zeros(num_thrusters, 1)}});
 
   casadi::DM u_opt = solution.at("x");
   std::map<skyweave::GridIndex, double> thrusts;
