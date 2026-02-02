@@ -183,7 +183,7 @@ std::map<skyweave::GridIndex, double> ShapeController::ComputeControlStep() {
 
   for (auto constraint: this->constraints_) {
     // J_1(q) * \dot{v} + \dot{J_1}(q) * v = J_2(q) * \dot{v} + \dot{J_2}(q) * v
-
+    // TODO add these constraints to the QP
   }
 
   casadi::Function solver =
