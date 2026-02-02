@@ -91,7 +91,7 @@ class SkyweaveLinkTracker : public ModelPlugin {
 
     this->springs = std::make_shared<skyweave_sim::Springs>(
         *(this->pin_model), this->frame_ids, this->gz_links_idx_map,
-        this->links, /*k_rot=*/0.5);
+        this->links, /*k_rot=*/0.08);
 
     this->gamma_surface = std::make_shared<skyweave::controller::GammaSurface>();
     this->shape_controller = std::make_shared<skyweave::controller::ShapeController>(
@@ -246,7 +246,8 @@ class SkyweaveLinkTracker : public ModelPlugin {
         // this->gamma_surface->update_angle(M_PI/2); // 90 degrees
         this->gamma_surface->update_phase(M_PI);
         this->springs->CalculateSpringTorques(
-          this->shape_controller->gamma_surface_->get_goal_joint_positions()
+            this->state_estimator->CurrentJointPositions()
+          // this->shape_controller->gamma_surface_->get_goal_joint_positions()
         );
 
         this->shape_controller->setSpringTorques(

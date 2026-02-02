@@ -27,6 +27,7 @@ using namespace casadi;
 class ShapeController {
 public:
 
+    std::vector<skyweave::ConstraintPair> constraints_;
     std::shared_ptr<skyweave::StateEstimator> state_estimator_;
     std::shared_ptr<skyweave::controller::GammaSurface> gamma_surface_;
     std::shared_ptr<pinocchio::Model> pin_model_;
@@ -35,9 +36,9 @@ public:
     Eigen::VectorXd desired_joint_acceleration_;
     Eigen::VectorXd spring_torques_;
     std::unique_ptr<skyweave::ConstrainedIKSolver> ik_solver_;
-    double kp_ = 50.0;
-    double kd_ = 12.0;
-    double ki_ = 0.0;
+    double kp_ = 10.0;
+    double kd_ = 2.0;
+    double ki_ = 0.01;
     Eigen::VectorXd integral_error_; // size nv
 
     // needs the current state (q, v) : which you can get from state estimator

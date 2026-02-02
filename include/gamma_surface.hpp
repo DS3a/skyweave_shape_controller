@@ -46,7 +46,7 @@ class GammaSurface {
 
     Eigen::VectorXd get_goal_joint_positions();
 
-  private:
+  // private: //make everything public
     /* parameters for the gamma surface controller
      * Amplitude
      * angle

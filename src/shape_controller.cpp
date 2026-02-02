@@ -24,6 +24,17 @@ ShapeController::ShapeController(
 
   this->gamma_surface_->init_ik_solver(
       pin_model_, state_estimator_->FrameIds());
+  this->constraints_ =
+      skyweave::BuildConstraintFrames(
+          this->gamma_surface_->num_elements_,
+          this->gamma_surface_->num_elements_);
+
+  for (auto constraint : this->constraints_) {
+    std::cout << "Constraint between (" << constraint.first.first << ", "
+              << constraint.first.second << ") and ("
+              << constraint.second.first << ", " << constraint.second.second
+              << ")\n";
+  }
 }
 
 void ShapeController::setSpringTorques(const Eigen::VectorXd& spring_torques) {
@@ -56,6 +67,7 @@ void ShapeController::ComputeRequiredJointPosAndAccel() {
 
   Eigen::VectorXd dq_ = pinocchio::difference(
       *(this->pin_model_), current_q, this->gamma_surface_->get_goal_joint_positions());
+  // std::cout << "computed dq_: " << dq_.transpose() << "\n";
   this->integral_error_ += dq_ * 0.02;  // assuming control step is 0.02s
   v_dot = kp_ * (dq_) - kd_ * current_v + ki_ * this->integral_error_;
 
@@ -75,14 +87,14 @@ std::map<skyweave::GridIndex, double> ShapeController::ComputeControlStep() {
   Eigen::VectorXd current_q = this->state_estimator_->CurrentJointPositions();
   Eigen::VectorXd current_v = this->state_estimator_->CurrentJointVelocities();
 
-  // pinocchio::crba(*(this->pin_model_), this->pin_data_, current_q);
-  // Eigen::MatrixXd M = this->pin_data_.M;
-  // M.triangularView<Eigen::StrictlyLower>() =
-  //     M.transpose().triangularView<Eigen::StrictlyLower>();
+  pinocchio::crba(*(this->pin_model_), this->pin_data_, current_q);
+  Eigen::MatrixXd M = this->pin_data_.M;
+  M.triangularView<Eigen::StrictlyLower>() =
+      M.transpose().triangularView<Eigen::StrictlyLower>();
 
-  // pinocchio::nonLinearEffects(*(this->pin_model_), this->pin_data_, current_q,
-  //                             current_v);
-  // Eigen::VectorXd h = this->pin_data_.nle;
+  pinocchio::nonLinearEffects(*(this->pin_model_), this->pin_data_, current_q,
+                              current_v);
+  Eigen::VectorXd h = this->pin_data_.nle;
   // (void)h;
 
   if (this->spring_torques_.size() != this->pin_model_->nv) {
@@ -125,9 +137,12 @@ std::map<skyweave::GridIndex, double> ShapeController::ComputeControlStep() {
       // this->ik_solver_->CurrentJointPositions());
       current_q);
 
-  // const Eigen::VectorXd desired_tau =
-  //     M * this->desired_joint_acceleration_ + h - this->spring_torques_;
-  const Eigen::VectorXd desired_tau = g_q - this->spring_torques_;
+  const Eigen::VectorXd desired_tau =
+      M * this->desired_joint_acceleration_ + h - this->spring_torques_;
+
+
+
+  // const Eigen::VectorXd desired_tau = g_q - this->spring_torques_;
   // std::cout << "the desired tau is: " << desired_tau.transpose() << "\n";
 
   casadi::DM A_dm = casadi::DM::zeros(nv, num_thrusters);
@@ -166,13 +181,18 @@ std::map<skyweave::GridIndex, double> ShapeController::ComputeControlStep() {
   opts["print_time"] = false;
   opts["ipopt.print_level"] = 0;
 
+  for (auto constraint: this->constraints_) {
+    // J_1(q) * \dot{v} + \dot{J_1}(q) * v = J_2(q) * \dot{v} + \dot{J_2}(q) * v
+
+  }
+
   casadi::Function solver =
       casadi::nlpsol(std::string("shape_thrust_solver"), std::string("ipopt"), nlp);
 
-  // casadi::DM lbx = -casadi::DM::ones(num_thrusters, 1) *
-  //                  std::numeric_limits<double>::infinity();
-  // casadi::DM ubx = casadi::DM::ones(num_thrusters, 1) *
-  //                  std::numeric_limits<double>::infinity();
+  // casadi::DM lbx = casadi::DM::ones(num_thrusters, 1) * -1;
+                  //  std::numeric_limits<double>::infinity();
+  // casadi::DM ubx = casadi::DM::ones(num_thrusters, 1) * 1;
+                  //  std::numeric_limits<double>::infinity();
   casadi::DMDict solution =
       solver(casadi::DMDict{{"x0", casadi::DM::zeros(num_thrusters, 1)}});
 
