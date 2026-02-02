@@ -1,6 +1,7 @@
 #include <gamma_surface.hpp>
 #include <state_estimator.hpp>
 #include <inverse_kinematics.hpp>
+#include <skyweave_sim.hpp>
 
 #include <pinocchio/algorithm/frames.hpp>
 #include <pinocchio/algorithm/jacobian.hpp>
@@ -27,6 +28,7 @@ using namespace casadi;
 class ShapeController {
 public:
 
+    std::unique_ptr<skyweave_sim::Springs> springs_;
     std::vector<skyweave::ConstraintPair> constraints_;
     std::shared_ptr<skyweave::StateEstimator> state_estimator_;
     std::shared_ptr<skyweave::controller::GammaSurface> gamma_surface_;
@@ -35,6 +37,7 @@ public:
     Eigen::VectorXd required_joint_positions_; // size nq
     Eigen::VectorXd desired_joint_acceleration_;
     Eigen::VectorXd spring_torques_;
+    Eigen::VectorXd previous_thrusts_;
     std::unique_ptr<skyweave::ConstrainedIKSolver> ik_solver_;
     double kp_ = 10.0;
     double kd_ = 2.0;
@@ -48,6 +51,12 @@ public:
                     std::shared_ptr<skyweave::controller::GammaSurface> gamma_surface,
                     std::shared_ptr<pinocchio::Model> pin_model);
 
+
+    void acquire_spring_model(std::unique_ptr<skyweave_sim::Springs> springs) {
+        this->springs_ = std::move(springs);
+
+    }
+    
     void setSpringTorques(const Eigen::VectorXd& spring_torques);
     void ComputeRequiredJointPosAndAccel();
     std::map<skyweave::GridIndex, double> ComputeControlStep();

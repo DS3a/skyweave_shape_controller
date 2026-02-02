@@ -28,6 +28,8 @@ ShapeController::ShapeController(
       skyweave::BuildConstraintFrames(
           this->gamma_surface_->num_elements_,
           this->gamma_surface_->num_elements_);
+  this->previous_thrusts_ =
+      Eigen::VectorXd::Zero(static_cast<int>(state_estimator_->FrameIds().size()));
 
   for (auto constraint : this->constraints_) {
     std::cout << "Constraint between (" << constraint.first.first << ", "
@@ -87,26 +89,29 @@ std::map<skyweave::GridIndex, double> ShapeController::ComputeControlStep() {
   Eigen::VectorXd current_q = this->state_estimator_->CurrentJointPositions();
   Eigen::VectorXd current_v = this->state_estimator_->CurrentJointVelocities();
 
-  pinocchio::crba(*(this->pin_model_), this->pin_data_, current_q);
-  Eigen::MatrixXd M = this->pin_data_.M;
-  M.triangularView<Eigen::StrictlyLower>() =
-      M.transpose().triangularView<Eigen::StrictlyLower>();
+  // pinocchio::crba(*(this->pin_model_), this->pin_data_, current_q);
+  // Eigen::MatrixXd M = this->pin_data_.M;
+  // M.triangularView<Eigen::StrictlyLower>() =
+  //     M.transpose().triangularView<Eigen::StrictlyLower>();
 
-  pinocchio::nonLinearEffects(*(this->pin_model_), this->pin_data_, current_q,
-                              current_v);
-  Eigen::VectorXd h = this->pin_data_.nle;
+  // pinocchio::nonLinearEffects(*(this->pin_model_), this->pin_data_, current_q,
+  //                             current_v);
+  // Eigen::VectorXd h = this->pin_data_.nle;
   // (void)h;
+  Eigen::VectorXd goal_q = this->gamma_surface_->get_goal_joint_positions();
+
+  this->springs_->CalculateSpringTorques(goal_q);
+  this->setSpringTorques(
+      this->springs_->getGeneralizedSpringForces());
 
   if (this->spring_torques_.size() != this->pin_model_->nv) {
     this->spring_torques_ = Eigen::VectorXd::Zero(this->pin_model_->nv);
   }
 
-  current_q = this->gamma_surface_->get_goal_joint_positions(); // this is just for gravity compenstaian
-
-  pinocchio::forwardKinematics(*(this->pin_model_), this->pin_data_, current_q,
+  pinocchio::forwardKinematics(*(this->pin_model_), this->pin_data_, goal_q,
                                current_v);
   pinocchio::updateFramePlacements(*(this->pin_model_), this->pin_data_);
-  pinocchio::computeJointJacobians(*(this->pin_model_), this->pin_data_, current_q);
+  pinocchio::computeJointJacobians(*(this->pin_model_), this->pin_data_, goal_q);
 
   const auto& frame_ids = this->state_estimator_->FrameIds();
   std::vector<skyweave::GridIndex> ordered_indices;
@@ -135,14 +140,14 @@ std::map<skyweave::GridIndex, double> ShapeController::ComputeControlStep() {
   const Eigen::VectorXd g_q = pinocchio::computeGeneralizedGravity(
       *(this->pin_model_), this->pin_data_,
       // this->ik_solver_->CurrentJointPositions());
-      current_q);
+      goal_q);
 
-  const Eigen::VectorXd desired_tau =
-      M * this->desired_joint_acceleration_ + h - this->spring_torques_;
+  // const Eigen::VectorXd desired_tau =
+  //     M * this->desired_joint_acceleration_ + h - this->spring_torques_;
 
 
 
-  // const Eigen::VectorXd desired_tau = g_q - this->spring_torques_;
+  const Eigen::VectorXd desired_tau = g_q - this->spring_torques_;
   // std::cout << "the desired tau is: " << desired_tau.transpose() << "\n";
 
   casadi::DM A_dm = casadi::DM::zeros(nv, num_thrusters);
@@ -197,10 +202,18 @@ std::map<skyweave::GridIndex, double> ShapeController::ComputeControlStep() {
       solver(casadi::DMDict{{"x0", casadi::DM::zeros(num_thrusters, 1)}});
 
   casadi::DM u_opt = solution.at("x");
+  Eigen::VectorXd u_opt_eigen(num_thrusters);
+  for (int i = 0; i < num_thrusters; ++i) {
+    u_opt_eigen(i) = static_cast<double>(u_opt(i));
+  }
+  double lpf_alpha = 0.6;
+  u_opt_eigen =
+      lpf_alpha * this->previous_thrusts_ + (1.0 - lpf_alpha) * u_opt_eigen;
+
   std::map<skyweave::GridIndex, double> thrusts;
   for (int i = 0; i < num_thrusters; ++i) {
     thrusts[ordered_indices[static_cast<std::size_t>(i)]] =
-        static_cast<double>(u_opt(i));
+        static_cast<double>(u_opt_eigen(i));
   }
 
   return thrusts;
