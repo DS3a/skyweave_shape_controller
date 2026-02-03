@@ -17,6 +17,7 @@
 #include <thrusters.hpp>
 #include <skyweave_sim.hpp>
 #include <shape_controller.hpp>
+#include <hover_controller.hpp>
 
 #include <filesystem>
 #include <exception>
@@ -96,6 +97,8 @@ class SkyweaveLinkTracker : public ModelPlugin {
     this->gamma_surface = std::make_shared<skyweave::controller::GammaSurface>();
     this->shape_controller = std::make_shared<skyweave::controller::ShapeController>(
         this->state_estimator, this->gamma_surface, this->pin_model);
+    this->hover_controller = std::make_shared<skyweave::controller::HoverController>(
+        this->state_estimator);
     this->shape_controller->acquire_spring_model(std::make_unique<skyweave_sim::Springs>(
         *(this->pin_model), this->frame_ids, this->gz_links_idx_map,
         this->links, /*k_rot=*/0.5));
@@ -220,6 +223,8 @@ class SkyweaveLinkTracker : public ModelPlugin {
             }
           }
         }
+
+        // the state also contains the centre position and orientation now
       
         this->state_estimator->setPositionMeasurements(this->positions, this->centre_orientation);
         this->state_estimator->updateEstimations(); 
@@ -331,6 +336,7 @@ class SkyweaveLinkTracker : public ModelPlugin {
 
   std::shared_ptr<skyweave::controller::GammaSurface> gamma_surface;
   std::shared_ptr<skyweave::controller::ShapeController> shape_controller;
+  std::shared_ptr<skyweave::controller::HoverController> hover_controller;
 
   std::shared_ptr<skyweave::StateEstimator> state_estimator;
 };
