@@ -30,12 +30,19 @@ ShapeController::ShapeController(
           this->gamma_surface_->num_elements_);
   this->previous_thrusts_ =
       Eigen::VectorXd::Zero(static_cast<int>(state_estimator_->FrameIds().size()));
+  this->num_thrusters_ =
+      static_cast<int>(state_estimator_->FrameIds().size());
 
   for (auto constraint : this->constraints_) {
     std::cout << "Constraint between (" << constraint.first.first << ", "
               << constraint.first.second << ") and ("
               << constraint.second.first << ", " << constraint.second.second
               << ")\n";
+  }
+
+  this->ordered_indices.reserve(state_estimator_->FrameIds().size());
+  for (const auto& [index, frame_id] : state_estimator_->FrameIds()) {
+    this->ordered_indices.push_back(index);
   }
 }
 
@@ -81,7 +88,7 @@ void ShapeController::ComputeRequiredJointPosAndAccel() {
 
 std::map<skyweave::GridIndex, double> ShapeController::ComputeControlStep() {
   this->ComputeRequiredJointPosAndAccel();
-  // TODO this seems underwhelming, maybe i should run more IK iterations, and take
+  // NOTTODO this seems underwhelming, maybe i should run more IK iterations, and take
   // acceleration as the difference
   // std::cout << "computed desired joint acceleration: "
   //           << this->desired_joint_acceleration_.transpose() << "\n";
@@ -114,16 +121,16 @@ std::map<skyweave::GridIndex, double> ShapeController::ComputeControlStep() {
   pinocchio::computeJointJacobians(*(this->pin_model_), this->pin_data_, goal_q);
 
   const auto& frame_ids = this->state_estimator_->FrameIds();
-  std::vector<skyweave::GridIndex> ordered_indices;
-  ordered_indices.reserve(frame_ids.size());
+  // std::vector<skyweave::GridIndex> ordered_indices;
+  // ordered_indices.reserve(frame_ids.size());
 
   const int nv = this->pin_model_->nv;
-  const int num_thrusters = static_cast<int>(frame_ids.size());
-  Eigen::MatrixXd A = Eigen::MatrixXd::Zero(nv, num_thrusters);
+  // const int num_thrusters = static_cast<int>(frame_ids.size());
+  Eigen::MatrixXd A = Eigen::MatrixXd::Zero(nv, num_thrusters_);
 
   int col = 0;
   for (const auto& [index, frame_id] : frame_ids) {
-    ordered_indices.push_back(index);
+    // ordered_indices.push_back(index);
     const Eigen::MatrixXd J = pinocchio::getFrameJacobian(
         *(this->pin_model_), this->pin_data_, frame_id,
         pinocchio::ReferenceFrame::WORLD);
@@ -150,19 +157,22 @@ std::map<skyweave::GridIndex, double> ShapeController::ComputeControlStep() {
   const Eigen::VectorXd desired_tau = g_q - this->spring_torques_;
   // std::cout << "the desired tau is: " << desired_tau.transpose() << "\n";
 
-  casadi::DM A_dm = casadi::DM::zeros(nv, num_thrusters);
+  // TODO expose A_dm for the hover_controller to reuse
+  casadi::DM A_dm = casadi::DM::zeros(nv, num_thrusters_);
   for (int r = 0; r < nv; ++r) {
-    for (int c = 0; c < num_thrusters; ++c) {
+    for (int c = 0; c < num_thrusters_; ++c) {
       A_dm(r, c) = A(r, c);
     }
   }
+
+  this->A_dm_ = A_dm;
 
   casadi::DM b_dm = casadi::DM::zeros(nv, 1);
   for (int r = 0; r < nv; ++r) {
     b_dm(r) = desired_tau(r);
   }
 
-  casadi::MX u = casadi::MX::sym("u", num_thrusters);
+  casadi::MX u = casadi::MX::sym("u", num_thrusters_);
   // std::cout << "try to multiply A with u\n";
 
   // std::cout << "A size: " << A_dm.size1() << " x " << A_dm.size2() << "\n";
@@ -188,22 +198,23 @@ std::map<skyweave::GridIndex, double> ShapeController::ComputeControlStep() {
 
   for (auto constraint: this->constraints_) {
     // J_1(q) * \dot{v} + \dot{J_1}(q) * v = J_2(q) * \dot{v} + \dot{J_2}(q) * v
-    // TODO add these constraints to the QP
+    // NOTTODO add these constraints to the QP
   }
 
   casadi::Function solver =
       casadi::nlpsol(std::string("shape_thrust_solver"), std::string("ipopt"), nlp);
 
-  // casadi::DM lbx = casadi::DM::ones(num_thrusters, 1) * -1;
+  // casadi::DM lbx = casadi::DM::ones(num_thrusters_, 1) * -1;
                   //  std::numeric_limits<double>::infinity();
-  // casadi::DM ubx = casadi::DM::ones(num_thrusters, 1) * 1;
+  // casadi::DM ubx = casadi::DM::ones(num_thrusters_, 1) * 1;
                   //  std::numeric_limits<double>::infinity();
   casadi::DMDict solution =
-      solver(casadi::DMDict{{"x0", casadi::DM::zeros(num_thrusters, 1)}});
+      solver(casadi::DMDict{{"x0", casadi::DM::zeros(num_thrusters_, 1)}});
 
   casadi::DM u_opt = solution.at("x");
-  Eigen::VectorXd u_opt_eigen(num_thrusters);
-  for (int i = 0; i < num_thrusters; ++i) {
+  this->thrusts_dm_ = u_opt;
+  Eigen::VectorXd u_opt_eigen(num_thrusters_);
+  for (int i = 0; i < num_thrusters_; ++i) {
     u_opt_eigen(i) = static_cast<double>(u_opt(i));
   }
   double lpf_alpha = 0.6;
@@ -211,7 +222,7 @@ std::map<skyweave::GridIndex, double> ShapeController::ComputeControlStep() {
       lpf_alpha * this->previous_thrusts_ + (1.0 - lpf_alpha) * u_opt_eigen;
 
   std::map<skyweave::GridIndex, double> thrusts;
-  for (int i = 0; i < num_thrusters; ++i) {
+  for (int i = 0; i < num_thrusters_; ++i) {
     thrusts[ordered_indices[static_cast<std::size_t>(i)]] =
         static_cast<double>(u_opt_eigen(i));
   }

@@ -1,3 +1,6 @@
+#pragma once
+#define SHAPE_CONTROLLER_HPP
+
 #include <gamma_surface.hpp>
 #include <state_estimator.hpp>
 #include <inverse_kinematics.hpp>
@@ -37,12 +40,18 @@ public:
     Eigen::VectorXd required_joint_positions_; // size nq
     Eigen::VectorXd desired_joint_acceleration_;
     Eigen::VectorXd spring_torques_;
+
     Eigen::VectorXd previous_thrusts_;
+    casadi::DM A_dm_; // mapping from thruster forces to joint torques, size nv x num_thrusters
+    casadi::DM thrusts_dm_; // size num_thrusters x 1
     std::unique_ptr<skyweave::ConstrainedIKSolver> ik_solver_;
+
+    std::vector<skyweave::GridIndex> ordered_indices;
     double kp_ = 10.0;
     double kd_ = 2.0;
     double ki_ = 0.01;
     Eigen::VectorXd integral_error_; // size nv
+    int num_thrusters_=25;
 
     // needs the current state (q, v) : which you can get from state estimator
     // needs the setpoints from gamma surface

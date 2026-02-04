@@ -98,7 +98,8 @@ class SkyweaveLinkTracker : public ModelPlugin {
     this->shape_controller = std::make_shared<skyweave::controller::ShapeController>(
         this->state_estimator, this->gamma_surface, this->pin_model);
     this->hover_controller = std::make_shared<skyweave::controller::HoverController>(
-        this->state_estimator);
+        this->state_estimator,
+        this->shape_controller);
     this->shape_controller->acquire_spring_model(std::make_unique<skyweave_sim::Springs>(
         *(this->pin_model), this->frame_ids, this->gz_links_idx_map,
         this->links, /*k_rot=*/0.5));
