@@ -40,6 +40,7 @@ public:
     Eigen::VectorXd required_joint_positions_; // size nq
     Eigen::VectorXd desired_joint_acceleration_;
     Eigen::VectorXd spring_torques_;
+    Eigen::Quaterniond centre_orientation_;
 
     Eigen::VectorXd previous_thrusts_;
     casadi::DM A_dm_; // mapping from thruster forces to joint torques, size nv x num_thrusters

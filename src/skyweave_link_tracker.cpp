@@ -102,7 +102,7 @@ class SkyweaveLinkTracker : public ModelPlugin {
         this->shape_controller);
     this->shape_controller->acquire_spring_model(std::make_unique<skyweave_sim::Springs>(
         *(this->pin_model), this->frame_ids, this->gz_links_idx_map,
-        this->links, /*k_rot=*/0.5));
+        this->links, /*k_rot=*/1.1));
   }
 
  private:
@@ -159,6 +159,7 @@ class SkyweaveLinkTracker : public ModelPlugin {
   }
 
   void OnUpdate(const common::UpdateInfo& info) {
+    static int update_count = 0;
     // TODO calculate the spring forces and apply the torques on the links based on the model
 
     // this->springs->ApplySpringTorques(
@@ -181,11 +182,19 @@ class SkyweaveLinkTracker : public ModelPlugin {
               //  << this->links.size() << " links)" << std::endl;
 
         Eigen::Vector3d centre;
+        Eigen::Vector3d base_linear_vel = Eigen::Vector3d::Zero();
+        Eigen::Vector3d base_angular_vel = Eigen::Vector3d::Zero();
+ 
         for (const auto& link : this->links) {
           if (!link) {
             continue;
           }
           const auto pose = link->WorldPose();
+          const auto vel = link->WorldLinearVel();
+          const auto ang_vel = link->WorldAngularVel();
+
+
+
           // stream << " - " << link->GetName() << ": " << pose.Pos().X() << " "
           //        << pose.Pos().Y() << " " << pose.Pos().Z() << std::endl;
 
@@ -210,6 +219,8 @@ class SkyweaveLinkTracker : public ModelPlugin {
                      << centre_orientation.y() << " "
                      << centre_orientation.z() << std::endl;
               centre = Eigen::Vector3d(pose.Pos().X(), pose.Pos().Y(), pose.Pos().Z());
+              base_linear_vel = Eigen::Vector3d(vel.X(), vel.Y(), vel.Z());
+              base_angular_vel = Eigen::Vector3d(ang_vel.X(), ang_vel.Y(), ang_vel.Z());
             }
           }
         }
@@ -225,10 +236,23 @@ class SkyweaveLinkTracker : public ModelPlugin {
           }
         }
 
+
+        Eigen::VectorXd base_link_pose(7);
+        base_link_pose.head<3>() = centre;
+        base_link_pose.tail<4>() = Eigen::Vector4d(centre_orientation.w(), centre_orientation.x(),
+                                        centre_orientation.y(), centre_orientation.z());
         // the state also contains the centre position and orientation now
-      
+        
+        Eigen::VectorXd base_link_twist(6);
+        base_link_twist.head<3>() = base_linear_vel;
+        base_link_twist.tail<3>() = base_angular_vel;
+
         this->state_estimator->setPositionMeasurements(this->positions, this->centre_orientation);
         this->state_estimator->updateEstimations(); 
+        this->hover_controller->setBaseLinkPose(base_link_pose);
+        this->hover_controller->setBaseLinkTwist(base_link_twist);
+        this->shape_controller->centre_orientation_ = this->centre_orientation;
+
         // gzmsg << stream.str();
       }
       double elapsed_control = (info.simTime - this->lastControlTime).Double();
@@ -244,9 +268,19 @@ class SkyweaveLinkTracker : public ModelPlugin {
 
         // set the desired shape in gamma surface
        if (info.simTime < common::Time(10, 0)) {
-          this->gamma_surface->update_amplitude(0.05); // 0.05 meter amplitude
-          this->gamma_surface->update_phase(M_PI);
-          this->gamma_surface->update_angle(M_PI/2);
+          this->gamma_surface->update_amplitude(0.1); // 0.05 meter amplitude
+          // this->gamma_surface->update_phase(M_PI * (update_count % 2));
+          if (update_count % 2 == 0) {
+            this->gamma_surface->update_phase(M_PI);
+            this->gamma_surface->update_angle(M_PI); // 0 degrees
+          } else {
+            this->gamma_surface->update_phase(0);
+            // this->gamma_surface->update_angle(M_PI/2); // 90 degrees
+          }
+          
+          update_count++;
+          // this->gamma_surface->update_angle(M_PI/2);
+          this->gamma_surface->update_frequency(M_PI/0.4);
         } else if (info.simTime < common::Time(15, 0)) {
           this->gamma_surface->update_amplitude(0.05); // 0.05 meter amplitude
           this->gamma_surface->update_phase(M_PI);
@@ -265,8 +299,9 @@ class SkyweaveLinkTracker : public ModelPlugin {
         // this->shape_controller->setSpringTorques(
         //     this->springs->getGeneralizedSpringForces()
         // );
-
-        std::map<skyweave::GridIndex, double> u_dict = this->shape_controller->ComputeControlStep();
+       this->shape_controller->ComputeControlStep();
+        // std::map<skyweave::GridIndex, double> u_dict = this->shape_controller->ComputeControlStep();
+        std::map<skyweave::GridIndex, double> u_dict = this->hover_controller->ComputeControlStep();
         std::cout << "Thruster commands:\n";
         for (const auto& [key, value] : u_dict) {
           std::cout << " - (" << key.first << ", " << key.second << "): " << value << "\n";
@@ -298,7 +333,7 @@ class SkyweaveLinkTracker : public ModelPlugin {
 
 
         this->thruster_commands.clear();
-        this->thruster_commands = u_dict;
+        this->thruster_commands = u_dict; 
       }      
     }
 

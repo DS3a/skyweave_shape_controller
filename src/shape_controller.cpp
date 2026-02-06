@@ -133,17 +133,25 @@ std::map<skyweave::GridIndex, double> ShapeController::ComputeControlStep() {
     // ordered_indices.push_back(index);
     const Eigen::MatrixXd J = pinocchio::getFrameJacobian(
         *(this->pin_model_), this->pin_data_, frame_id,
+        // pinocchio::ReferenceFrame::LOCAL_WORLD_ALIGNED);
         pinocchio::ReferenceFrame::WORLD);
     const Eigen::MatrixXd J_trans = J.topRows(3);
-    // const Eigen::Matrix3d R = this->pin_data_.oMf[frame_id].rotation();
-    // const Eigen::Vector3d force_world = R * Eigen::Vector3d(0.0, 0.0, 1.0);
-    A.col(col) = J_trans.transpose() * Eigen::Vector3d(0.0, 0.0, 1.0);
+    const Eigen::Matrix3d R = this->pin_data_.oMf[frame_id].rotation();
+    const Eigen::Vector3d force_world = R * Eigen::Vector3d(0.0, 0.0, 1.0);
+    // A.col(col) = J_trans.transpose() * Eigen::Vector3d(0.0, 0.0, 1.0);
+    A.col(col) = J_trans.transpose() * force_world;
     // A.col(col) = J.row(2).transpose();  // only the z thrust
     // std::cout << "the jacobian is " << J_trans << "\n";
     ++col;
   }
 
   // TODO update model gravity vector based on current orientation
+  Eigen::Vector3d gravity_vector =
+      this->centre_orientation_.toRotationMatrix() *
+      Eigen::Vector3d(0.0, 0.0, -9.81);
+
+  this->pin_model_->gravity.linear() = gravity_vector;
+
   const Eigen::VectorXd g_q = pinocchio::computeGeneralizedGravity(
       *(this->pin_model_), this->pin_data_,
       // this->ik_solver_->CurrentJointPositions());
@@ -157,7 +165,7 @@ std::map<skyweave::GridIndex, double> ShapeController::ComputeControlStep() {
   const Eigen::VectorXd desired_tau = g_q - this->spring_torques_;
   // std::cout << "the desired tau is: " << desired_tau.transpose() << "\n";
 
-  // TODO expose A_dm for the hover_controller to reuse
+  // DONE expose A_dm for the hover_controller to reuse
   casadi::DM A_dm = casadi::DM::zeros(nv, num_thrusters_);
   for (int r = 0; r < nv; ++r) {
     for (int c = 0; c < num_thrusters_; ++c) {

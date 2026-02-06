@@ -32,6 +32,10 @@ void StateEstimator::setPositionMeasurements(PositionMap measurements,
   this->position_measurements = std::move(measurements);
   // rotate all measurements to be in the model frame
   for (auto& [grid_index, position] : this->position_measurements) {
+    // centre_orientation contains the transformation from frame to world
+    // we take it's inverse to make it from the world to frame
+    // that way we can get the position of the links with respect to the base link
+    // 
     position = centre_orientation.inverse() * position;
     // position = centre_orientation * position;
   }
