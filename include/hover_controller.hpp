@@ -285,7 +285,7 @@ public: // make everything public cuz I'm lazy to make setter and getter functio
             }
         }
 
-        // TODO take the first 6 rows of A_dm_fb and put it on top of A_dm to form A_base
+        // take the first 6 rows of A_dm_fb and put it on top of A_dm to form A_base
         casadi::DM A_base = casadi::DM::zeros(6, this->num_thrusters_);
         for (int r = 0; r < 6; ++r) {
             for (int c = 0; c < this->num_thrusters_; ++c) {
@@ -298,10 +298,42 @@ public: // make everything public cuz I'm lazy to make setter and getter functio
                         // h_dm - mtimes(A_base, shape_thrusts) - spring_generalized_forces_dm;
         // casadi::MX dynamics_constraint = mtimes(M_dm, dot_v) - casadi::MX::vertcat({casadi::MX::zeros(6, 1), mtimes(A_dm, delta_u)}) + 
         //                 h_dm - casadi::MX::vertcat({casadi::MX::zeros(6, 1), mtimes(A_dm, shape_thrusts)}) - spring_generalized_forces_dm;
-        casadi::MX dynamics_constraint = mtimes(M_dm, dot_v) - mtimes(A_dm_fb, delta_u) + 
-                        h_dm - mtimes(A_dm_fb, shape_thrusts) - spring_generalized_forces_dm;
+        // casadi::MX dynamics_constraint = mtimes(M_dm, dot_v) - mtimes(A_dm_fb, delta_u) + 
+        //                 h_dm - mtimes(A_dm_fb, shape_thrusts) - spring_generalized_forces_dm;
 
 
+        // TODO we wanna modify this. We treat the shape as a rigid body, take only the first 6x6 slice of the mass matrix,
+        // and the new dynamics constraint will just be the thrusts acting on the base link (producing a torque wrench based on)
+        // the relative position of the thruster (w.r.t the base link).
+        // M_base * dot_v_base - A_base * delta_u + h_base - A_base * shape_thrusts = 0
+        // A_base is the matrix that transforms thrusts in the frames of the thrusters (basically in the form (0, 0, fz)) to
+        //  a wrench on the base link, based on the relative position of the thrusters to the base link and the orientation of the surface 
+        //  (which determines the direction of the thrust force in the world frame)
+        casadi::DM M_base_dm = casadi::DM::zeros(6, 6);
+        M_base_dm = M_dm(casadi::Slice(0, 6), casadi::Slice(0, 6));
+        casadi:DM h_base_dm = casadi::DM::zeros(6, 1);
+        h_base_dm = h_dm(casadi::Slice(0, 6), casadi::Slice());
+        // to construct A_dm I need the rotational transform from the thruster to base link
+        // I also need both their positions in the world frame to calculate the moment arm for the torque part of the wrench
+        // I need these positions in the world frame because I am trying to control the direction of the accereration in the world frame
+        // I can get the rotational tranform from the thruster to the base from the pinocchio model in the shape controller.
+        // I have the orientation of the base link which I can use to get the transform from the thruster frame to world frame,
+        // this I can use to calculate the world frame force vector of the wrench
+        
+        // I have R(thruster -> base). so if I multiply it to the force vector in the thruster frame (0, 0, fz), 
+        // I can get the force vector in the base link frame (let us say it is force_base). 
+        // I have R(base -> world). so to get the force vector in the world frame. I need to multiply R(base->world) to force_base to get force_world
+
+        // now for the torque part of the wrench (which is in the world frame), I need to get the position of the base link in the world frame.
+        // I also need to get the position of the thruster in the world frame.
+        // I can get the position of the thruster with respect to the base link from the pinocchio model in the shape controller.
+        // I can get the position of the thruster in the world frame by rotating the position of the thruster with respect to 
+        // the base link into the world frame using the orientation of the base link, and then adding the position of the base link in the world frame.
+
+        // from the shape controller pinocchio model I can get the displacement vector from the base to the thruster.
+        //  let us say that vector is P(base -> thruster). If I multiply R(base -> world) to this vector, I can get the displacement in the world frame.
+        // that displacement can be used to calculate the torque produced by the thruster force on the base link in the world frame as 
+        // torque_world = cross(P(base->thruster)_world, force_world)
 
         // null space constraint with slack
         // A * delta_u - s = 0
