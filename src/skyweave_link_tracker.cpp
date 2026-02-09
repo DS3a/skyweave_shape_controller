@@ -239,8 +239,10 @@ class SkyweaveLinkTracker : public ModelPlugin {
 
         Eigen::VectorXd base_link_pose(7);
         base_link_pose.head<3>() = centre;
-        base_link_pose.tail<4>() = Eigen::Vector4d(centre_orientation.w(), centre_orientation.x(),
-                                        centre_orientation.y(), centre_orientation.z());
+        Eigen::Quaterniond centre_orientation_q = Eigen::Quaterniond(
+            centre_orientation.w(), centre_orientation.x(),
+            centre_orientation.y(), centre_orientation.z());
+        base_link_pose.tail<4>() = centre_orientation_q.coeffs(); // note that Eigen's quaternion coeffs are in the order (x, y, z, w)
         // the state also contains the centre position and orientation now
         
         Eigen::VectorXd base_link_twist(6);
@@ -275,6 +277,7 @@ class SkyweaveLinkTracker : public ModelPlugin {
             this->gamma_surface->update_angle(M_PI); // 0 degrees
           } else {
             this->gamma_surface->update_phase(0);
+            // this->gamma_surface->update_phase(M_PI);
             // this->gamma_surface->update_angle(M_PI/2); // 90 degrees
           }
           
@@ -299,9 +302,9 @@ class SkyweaveLinkTracker : public ModelPlugin {
         // this->shape_controller->setSpringTorques(
         //     this->springs->getGeneralizedSpringForces()
         // );
-       this->shape_controller->ComputeControlStep();
-        // std::map<skyweave::GridIndex, double> u_dict = this->shape_controller->ComputeControlStep();
-        std::map<skyweave::GridIndex, double> u_dict = this->hover_controller->ComputeControlStep();
+      //  this->shape_controller->ComputeControlStep();
+        std::map<skyweave::GridIndex, double> u_dict = this->shape_controller->ComputeControlStep();
+        // std::map<skyweave::GridIndex, double> u_dict = this->hover_controller->ComputeControlStep();
         std::cout << "Thruster commands:\n";
         for (const auto& [key, value] : u_dict) {
           std::cout << " - (" << key.first << ", " << key.second << "): " << value << "\n";

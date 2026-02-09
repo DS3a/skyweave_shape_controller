@@ -225,7 +225,7 @@ std::map<skyweave::GridIndex, double> ShapeController::ComputeControlStep() {
   for (int i = 0; i < num_thrusters_; ++i) {
     u_opt_eigen(i) = static_cast<double>(u_opt(i));
   }
-  double lpf_alpha = 0.6;
+  double lpf_alpha = 0.95;
   u_opt_eigen =
       lpf_alpha * this->previous_thrusts_ + (1.0 - lpf_alpha) * u_opt_eigen;
 

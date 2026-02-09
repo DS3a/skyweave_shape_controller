@@ -166,7 +166,7 @@ public: // make everything public cuz I'm lazy to make setter and getter functio
         
         // weights for the cost function, these can be tuned as hyperparameters
         casadi::DM delta_u_w = casadi::DM::ones(this->num_thrusters_, 1)  * 200.005;
-        casadi::DM dot_v_w = casadi::DM::ones(this->pin_model_->nv, 1)    * 50.005;
+        casadi::DM dot_v_w = casadi::DM::ones(this->pin_model_->nv, 1)    * 500.005;
         casadi::DM s_w = casadi::DM::ones(A_dm.size1(), 1)                * 1.01;
         casadi::DM s_acc_w = casadi::DM::ones(6, 1)                       * 10.0;
 
@@ -226,6 +226,12 @@ public: // make everything public cuz I'm lazy to make setter and getter functio
         pinocchio::nonLinearEffects(*(this->pin_model_), this->pin_data_, current_q,
                               current_v);
         Eigen::VectorXd h = this->pin_data_.nle;
+
+        pinocchio::forwardKinematics(*(this->pin_model_), this->pin_data_, current_q);
+        pinocchio::updateFramePlacements(*(this->pin_model_), this->pin_data_);
+        pinocchio::computeJointJacobians(*(this->pin_model_), this->pin_data_, current_q);
+
+
         this->shape_controller_->springs_->CalculateSpringTorques(current_q.segment(7, est_q.size()));
         Eigen::VectorXd spring_forces_shape = this->shape_controller_->springs_->getGeneralizedSpringForces(); 
         // this is the S(q) term in the dynamics equation, we need to add 6 zeros on top of it to account for the floating base
@@ -263,6 +269,14 @@ public: // make everything public cuz I'm lazy to make setter and getter functio
 
         Eigen::MatrixXd A = Eigen::MatrixXd::Zero(this->pin_model_->nv, this->num_thrusters_);
         int col = 0;
+        
+        Eigen::Quaterniond base_link_orientation(this->base_link_pose(6), //w
+                            this->base_link_pose(3), //x
+                            this->base_link_pose(4), //y
+                            this->base_link_pose(5)); //z
+        Eigen::Matrix3d base_link_to_world_rot = base_link_orientation.toRotationMatrix();
+ 
+
         for (const auto& [index, frame_id] : this->state_estimator_->FrameIds()) {
             // ordered_indices.push_back(index);
             const Eigen::MatrixXd J = pinocchio::getFrameJacobian(
@@ -272,7 +286,8 @@ public: // make everything public cuz I'm lazy to make setter and getter functio
             const Eigen::MatrixXd J_trans = J.topRows(3);
             const Eigen::Matrix3d R = this->pin_data_.oMf[frame_id].rotation();
             const Eigen::Vector3d force_world = R * Eigen::Vector3d(0.0, 0.0, 1.0);
-            A.col(col) = J_trans.transpose() * force_world;
+           Eigen::Vector3d force_body = base_link_to_world_rot.transpose() * force_world;
+            A.col(col) = J_trans.transpose() * force_body;
             // A.col(col) = J_trans.transpose() * Eigen::Vector3d(0, 0, 1);
             // A.col(col) = J.row(2).transpose();  // only the z thrust
             // std::cout << "the jacobian is " << J_trans << "\n";
@@ -292,14 +307,6 @@ public: // make everything public cuz I'm lazy to make setter and getter functio
                 A_base(r, c) = A_dm_fb(r, c);
             }
         }
-        A_dm_fb = casadi::DM::vertcat({A_base, A_dm});
-
-        // casadi::MX dynamics_constraint = mtimes(M_dm, dot_v) - mtimes(A_base, delta_u) + 
-                        // h_dm - mtimes(A_base, shape_thrusts) - spring_generalized_forces_dm;
-        // casadi::MX dynamics_constraint = mtimes(M_dm, dot_v) - casadi::MX::vertcat({casadi::MX::zeros(6, 1), mtimes(A_dm, delta_u)}) + 
-        //                 h_dm - casadi::MX::vertcat({casadi::MX::zeros(6, 1), mtimes(A_dm, shape_thrusts)}) - spring_generalized_forces_dm;
-        // casadi::MX dynamics_constraint = mtimes(M_dm, dot_v) - mtimes(A_dm_fb, delta_u) + 
-        //                 h_dm - mtimes(A_dm_fb, shape_thrusts) - spring_generalized_forces_dm;
 
 
         // TODO we wanna modify this. We treat the shape as a rigid body, take only the first 6x6 slice of the mass matrix,
@@ -320,6 +327,52 @@ public: // make everything public cuz I'm lazy to make setter and getter functio
         // I have the orientation of the base link which I can use to get the transform from the thruster frame to world frame,
         // this I can use to calculate the world frame force vector of the wrench
         
+        casadi::DM A_base_wrench_dm = casadi::DM::zeros(6, this->num_thrusters_);
+        Eigen::MatrixXd A_base_wrench_eig = Eigen::MatrixXd::Zero(6, this->num_thrusters_);
+        int cols = 0;
+        // TODO construct the A matrix which is a 6xnum_thrusters matrix that maps the thrusts in the thruster frames to a wrench in base link
+        for (auto frame: this->state_estimator_->FrameIds()) {
+            skyweave::GridIndex grid_index = frame.first;
+            pinocchio::FrameIndex frame_id = frame.second;
+            Eigen::Vector3d force_thruster = Eigen::Vector3d(0.0, 0.0, 1.0); // in the thruster frame, the force is always in the +z direction
+            // for each thruster frame, get the rotation from the thruster frame to the base link frame
+
+            Eigen::Matrix3d frame_to_world_rot = this->pin_data_.oMf[frame_id].rotation();
+            Eigen::Vector3d force_world = frame_to_world_rot * force_thruster;
+            Eigen::Vector3d force_base = base_link_to_world_rot.transpose() * force_world;
+
+            Eigen::Vector3d position_thruster_in_world = this->pin_data_.oMf[frame_id].translation();
+            Eigen::Vector3d position_base_in_world = this->base_link_pose.segment(0, 3);
+            Eigen::Vector3d torque_arm = position_thruster_in_world - position_base_in_world;
+            Eigen::Vector3d torque_world = torque_arm.cross(force_world);
+            Eigen::Vector3d torque_base = base_link_to_world_rot.transpose() * torque_world;
+            Eigen::VectorXd wrench_base = Eigen::VectorXd::Zero(6);
+            wrench_base.segment(0, 3) = force_base;
+            wrench_base.segment(3, 3) = torque_base;
+            // now I can put this wrench in the corresponding column of A_base_wrench_dm
+            // each element in u must go into (0, 0, u)^T
+            // 
+            A_base_wrench_eig.col(cols) = wrench_base;
+            cols++;
+
+
+            // get the position of the thruster in the world frame
+            // get the position of the base link in the world frame
+            // calculate the force vector in the world frame by rotating the (0, 0, fz) vector in the thruster frame to the world frame using the rotation from thruster to world
+            // calculate the torque vector in the world frame by taking the cross product of the position vector from base link to thruster (in world frame) and the force vector in world frame
+            // combine the force and torque vector to get the wrench in world frame
+            // this wrench is what contributes to the acceleration of the base link in world frame, so we can put it in A_base matrix which maps thrusts to base link acceleration in world frame
+        }
+
+        for (int r = 0; r < 6; ++r) {
+            for (int c = 0; c < this->num_thrusters_; ++c) {
+                A_base_wrench_dm(r, c) = A_base_wrench_eig(r, c);
+            }
+        }
+
+        // casadi::MX dynamics_constraint = mtimes(M_base_dm, dot_v(casadi::Slice(0, 6))) - mtimes(A_base_wrench_dm, delta_u) + 
+        //                 h_base_dm - mtimes(A_base_wrench_dm, shape_thrusts);
+
         // I have R(thruster -> base). so if I multiply it to the force vector in the thruster frame (0, 0, fz), 
         // I can get the force vector in the base link frame (let us say it is force_base). 
         // I have R(base -> world). so to get the force vector in the world frame. I need to multiply R(base->world) to force_base to get force_world
@@ -335,19 +388,35 @@ public: // make everything public cuz I'm lazy to make setter and getter functio
         // that displacement can be used to calculate the torque produced by the thruster force on the base link in the world frame as 
         // torque_world = cross(P(base->thruster)_world, force_world)
 
+
+
+
+
+        A_dm_fb = casadi::DM::vertcat({A_base_wrench_dm, A_dm});
+
+        // casadi::MX dynamics_constraint = mtimes(M_dm, dot_v) - mtimes(A_base, delta_u) + 
+                        // h_dm - mtimes(A_base, shape_thrusts) - spring_generalized_forces_dm;
+        // casadi::MX dynamics_constraint = mtimes(M_dm, dot_v) - casadi::MX::vertcat({casadi::MX::zeros(6, 1), mtimes(A_dm, delta_u)}) + 
+        //                 h_dm - casadi::MX::vertcat({casadi::MX::zeros(6, 1), mtimes(A_dm, shape_thrusts)}) - spring_generalized_forces_dm;
+        casadi::MX dynamics_constraint = mtimes(M_dm, dot_v) - mtimes(A_dm_fb, delta_u) + 
+                        h_dm - mtimes(A_dm_fb, shape_thrusts) - spring_generalized_forces_dm;
+
+
         // null space constraint with slack
         // A * delta_u - s = 0
         casadi::MX null_space_constraint = mtimes(A_dm, delta_u);
 
+        // casadi::MX g = casadi::MX::vertcat({accel_constraint, /*null_space_constraint,*/ dynamics_constraint});
         casadi::MX g = casadi::MX::vertcat({accel_constraint, null_space_constraint, dynamics_constraint});
 
         nlp["g"] = g;
         casadi::Dict opts;
         opts["print_time"] = false;
-        opts["ipopt.print_level"] = 0;
+        opts["ipopt.print_level"] = 5;
+        opts["ipopt.max_iter"] = 100;
 
         casadi::Function solver =
-            casadi::nlpsol(std::string("hover_controller_solver"), std::string("ipopt"), nlp);
+            casadi::nlpsol(std::string("hover_controller_solver"), std::string("ipopt"), nlp, opts);
         
 
         casadi::DMDict solution = 
