@@ -415,6 +415,9 @@ public: // make everything public cuz I'm lazy to make setter and getter functio
         opts["ipopt.print_level"] = 5;
         opts["ipopt.max_iter"] = 100;
 
+ /*
+
+
         casadi::Function solver =
             casadi::nlpsol(std::string("hover_controller_solver"), std::string("ipopt"), nlp, opts);
         
@@ -426,13 +429,18 @@ public: // make everything public cuz I'm lazy to make setter and getter functio
             });
 
         casadi::DM delta_u_dm = solution.at("x")(casadi::Slice(0, this->num_thrusters_), casadi::Slice());
+
+
+        */
         Eigen::VectorXd delta_u_eigen = Eigen::VectorXd::Zero(this->num_thrusters_);
+        
+        /*
         for (int i = 0; i < this->num_thrusters_; ++i) {
             delta_u_eigen(i) = delta_u_dm(i).scalar();
         }
 
         std::cout << "calculated deltas " << delta_u_eigen.transpose() << "\n";
-
+*/
         // TODO apply the delta_u to the original thrusts to get the final thrust command
         std::map<skyweave::GridIndex, double> final_thrusts;
         for (int i = 0; i < this->num_thrusters_; ++i) {
@@ -440,6 +448,23 @@ public: // make everything public cuz I'm lazy to make setter and getter functio
             // we can also add some saturation here if needed
             final_thrusts[this->shape_controller_->ordered_indices[i]] = final_thrust;
         }
+
+        // make PD controller for final_thrusts[{0, 0}] to track the desired base position (0, 0, 1.3)
+        double kp_hover = 0.05;
+        double kd_hover = 0.001;
+        Eigen::Vector3d current_base_linear_position = this->base_link_pose.segment(0, 3);
+        double desired_base_z_position = 1.0;
+        double current_base_z_position = current_base_linear_position(2);
+        double position_error = desired_base_z_position - current_base_z_position;
+        double current_base_z_velocity = this->base_link_twist(2);
+        double velocity_error = - current_base_z_velocity;
+        double pd_correction = kp_hover * position_error + kd_hover * velocity_error;
+
+
+        // final_thrusts[{0, 0}] += 1 + pd_correction; // only z direction thrust
+
+        // final_thrusts[{0, 0}] += 1;
+
         return final_thrusts;
     }
 };
