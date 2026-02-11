@@ -69,7 +69,7 @@ void Springs::ApplySpringTorques(
     if (!link) {
       continue;
     }
-    link->AddRelativeTorque(
+    link->AddForce(
         ignition::math::Vector3d(torque.x(), torque.y(), torque.z()));
   }
 }

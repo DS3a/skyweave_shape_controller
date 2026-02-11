@@ -190,12 +190,14 @@ class SkyweaveLinkTracker : public ModelPlugin {
     static double desired_pitch = 0.00;
     // TODO calculate the spring forces and apply the torques on the links based on the model
 
-    // this->springs->ApplySpringTorques(
-    //     this->springs->CalculateSpringTorques(
-    //         this->state_estimator->CurrentJointPositions()
-    //     )
-    // );
-    // rate of the state estimator
+    this->springs->ApplySpringTorques(
+        this->springs->CalculateSpringTorques(
+            this->state_estimator->CurrentJointPositions()
+        )
+    );
+
+
+//    rate of the state estimator
     if (this->printPeriod > 0.0) {
       const double elapsed = (info.simTime - this->lastPrintTime).Double();
       if (elapsed < this->printPeriod) {
@@ -287,6 +289,7 @@ class SkyweaveLinkTracker : public ModelPlugin {
       if (elapsed_control < this->controlPeriod) {
         // return;
       } else {
+        this->control_ticks++;
         this->lastControlTime = info.simTime;
 
         // this->springs->CalculateSpringTorques(
@@ -332,20 +335,45 @@ class SkyweaveLinkTracker : public ModelPlugin {
         double pitch_error =  pitch - desired_pitch; // desired pitch is 0
         std::cout << "roll error is " << roll_error << " and pitch error is " << pitch_error << "\n";
 
-        double angle_correction_kp =  0.0000009;
-        double angle_correcttion_kd = 0.0000005;
+        double angle_correction_kp =  11.009;
+        double angle_correcttion_kd = 2.0000005;
+        static bool phase_switch = false;
 
 
 
         // set the desired shape in gamma surface
-       if (info.simTime < common::Time(20, 0)) {
-          this->gamma_surface->update_amplitude(0.05); // 0.05 meter amplitude
+        // TODO make amplitude oscillate between 0 and 0.05 with a parameterized frequency with time as control_ticks
+          // --- params ---
+          const double A = 0.01;                 // max amplitude
+          const double dt = 1.0 / 50.0;          // if control_ticks increments at 50 Hz (change if not)
+          const double f_env = 1.0 / 5;        // envelope frequency (Hz). Period = 4s. Change as you like.
+          const double eps = 1e-4;               // "close to zero" threshold in meters
+
+          // --- time ---
+          double t = control_ticks * dt;
+
+          // --- smooth ramp up/down envelope (0 -> A -> 0) ---
+          double env = 0.5 * (1.0 - std::cos(2.0 * M_PI * f_env * t));  // in [0,1]
+          double amp = A * env;
+
+          // --- edge-detect "near zero" to flip once per cycle ---
+          static bool was_near_zero = true; // start true so we don't flip immediately at t=0
+          bool near_zero = (amp < eps);
+
+          if (near_zero && !was_near_zero) {
+            phase_switch = !phase_switch;   // flip only when we RETURN to zero
+          }
+          was_near_zero = near_zero;
+
+
+         this->gamma_surface->update_amplitude(amp); // 0.05 meter amplitude
           // this->gamma_surface->update_phase(M_PI * (update_count % 2));
           if (update_count % 4 == 0) {
-            roll_and_not_pitch = !roll_and_not_pitch;
+            // roll_and_not_pitch = !roll_and_not_pitch;
           }
           
-          if (update_count % 2 == 0) {
+          // check if amplitude is close to zero, every time it crosses zero, we flip the phase from PI to the PD controller, and back
+          if (phase_switch) {
             this->gamma_surface->update_phase(M_PI);
             // do pitch correction in one iteration i.e. angle M_PI
             // and in the next iteration do roll correction i.e. angle M_PI/2
@@ -360,39 +388,19 @@ class SkyweaveLinkTracker : public ModelPlugin {
             // this->gamma_surface->update_angle(M_PI/2); // 90 degrees
             if (roll_and_not_pitch) {
               // correct roll
-              this->gamma_surface->update_phase(angle_correction_kp * roll_error - angle_correcttion_kd * base_link_twist(3));
-              // this->gamma_surface->update_phase(0.00);
+              // this->gamma_surface->update_phase(angle_correction_kp * roll_error + angle_correcttion_kd * base_link_twist(3));
+              this->gamma_surface->update_phase(0.00);
             } else {
-              this->gamma_surface->update_phase(angle_correction_kp * pitch_error - angle_correcttion_kd * base_link_twist(4));
-              // this->gamma_surface->update_phase(0.00);
+              // this->gamma_surface->update_phase(angle_correction_kp * pitch_error + angle_correcttion_kd * base_link_twist(4));
+              this->gamma_surface->update_phase(0.00);
               // correct pitch              
             }
-            // this->gamma_surface->update_phase(M_PI);
-            // this->gamma_surface->update_angle(M_PI/2); // 90 degrees
           }
           
           update_count++;
-          // this->gamma_surface->update_angle(M_PI/2);
           this->gamma_surface->update_frequency(M_PI/0.4);
-        } else if (info.simTime < common::Time(25, 0)) {
-          this->gamma_surface->update_amplitude(0.05); // 0.05 meter amplitude
-          this->gamma_surface->update_phase(M_PI);
-          this->gamma_surface->update_angle(0);
-        } else {
-          this->gamma_surface->update_amplitude(0.01); // reduce amplitude to 1 cm
-          this->gamma_surface->update_angle(M_PI/4);
-          this->gamma_surface->update_frequency(M_PI/0.8); // reduce frequency
-        }
-        // this->gamma_surface->update_angle(M_PI/2); // 90 degrees
-        // this->springs->CalculateSpringTorques(
-        //     // this->state_estimator->CurrentJointPositions()
-        //   this->shape_controller->gamma_surface_->get_goal_joint_positions()
-        // );
 
-        // this->shape_controller->setSpringTorques(
-        //     this->springs->getGeneralizedSpringForces()
-        // );
-      //  this->shape_controller->ComputeControlStep();
+        //  this->shape_controller->ComputeControlStep();
         std::map<skyweave::GridIndex, double> u_dict = this->shape_controller->ComputeControlStep();
         // std::map<skyweave::GridIndex, double> u_dict = this->hover_controller->ComputeControlStep();
 
@@ -475,6 +483,7 @@ class SkyweaveLinkTracker : public ModelPlugin {
 
   double controlRate = 50.0;
   double controlPeriod = 0.02;
+  int control_ticks = 0;
 
   std::shared_ptr<skyweave::controller::GammaSurface> gamma_surface;
   std::shared_ptr<skyweave::controller::ShapeController> shape_controller;
