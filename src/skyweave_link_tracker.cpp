@@ -38,7 +38,8 @@ double unwrap(double prev, double current)
     double diff = current - prev;
     while (diff > M_PI)  diff -= 2.0 * M_PI;
     while (diff < -M_PI) diff += 2.0 * M_PI;
-    return prev + diff;
+    return current;
+    // return prev + diff;
 }
 
 // Ensure q is continuous over time: q(t) should not randomly flip sign.
@@ -185,6 +186,8 @@ class SkyweaveLinkTracker : public ModelPlugin {
     Eigen::VectorXd base_link_pose(7);
 
     Eigen::VectorXd base_link_twist(6);
+    static double desired_roll = 0;
+    static double desired_pitch = 0.00;
     // TODO calculate the spring forces and apply the torques on the links based on the model
 
     // this->springs->ApplySpringTorques(
@@ -290,7 +293,6 @@ class SkyweaveLinkTracker : public ModelPlugin {
         //     this->state_estimator->CurrentJointPositions()
         // );
 
-        static bool first_ori_done = false;
         static Eigen::Quaterniond prev_centre_orientation_q(1, 0, 0, 0); // identity quaternion
         Eigen::Quaterniond zero_rotation_q(1, 0, 0, 0); // identity quaternion
 
@@ -298,38 +300,40 @@ class SkyweaveLinkTracker : public ModelPlugin {
         Eigen::Quaterniond centre_orientation_q = Eigen::Quaterniond(
             centre_orientation.w(), centre_orientation.x(),
             centre_orientation.y(), centre_orientation.z());
+          
+        centre_orientation_q = zero_rotation_q.conjugate() * centre_orientation_q; // rotate the orientation to make the initial orientation as the reference
         centre_orientation_q.normalize();
-        if (!first_ori_done) {
-          first_ori_done = true;
-        } else {
-          centre_orientation_q = makeContinuous(centre_orientation_q, prev_centre_orientation_q);
-        }
+        centre_orientation_q = makeContinuous(centre_orientation_q, prev_centre_orientation_q);
         prev_centre_orientation_q = centre_orientation_q;
 
 
-        Eigen::Vector3d euler_angles = centre_orientation_q.toRotationMatrix().eulerAngles(0, 1, 2);
+        Eigen::Matrix3d R = centre_orientation_q.toRotationMatrix();
 
         static double roll_prev = 0.0;
         static double pitch_prev = 0.0;
+        static bool roll_and_not_pitch = true; // whether to correct roll or pitch in the current iteration
 
         // NOTE euler angles are acting weirdly, they are not continuous and they jump from -pi to pi randomly, so I need to unwrap them to make them continuous before feeding them into 
         // the controller. I think this is because of the way the quaternion is converted to euler angles, it is not guaranteed to be continuous. 
         // So I will implement an unwrap function that takes the previous angle and the current angle and unwraps it to make it continuous.
 
-        double roll_raw = euler_angles(0);
-        double pitch_raw = euler_angles(1);
+        double roll_raw = std::atan2(R(2,1), R(2,2));
+        double pitch_raw = std::asin(std::clamp(-R(2,0), -1.0, 1.0));
 
         double roll = unwrap(roll_prev, roll_raw);
+        roll = roll_raw;
         double pitch = unwrap(pitch_prev, pitch_raw);
+        pitch = pitch_raw;
+        
         roll_prev = roll;
         pitch_prev = pitch;
 
-        double roll_error =  roll; // desired roll is 0
-        double pitch_error =  pitch; // desired pitch is 0
+        double roll_error = roll - desired_roll; // desired roll is 0
+        double pitch_error =  pitch - desired_pitch; // desired pitch is 0
         std::cout << "roll error is " << roll_error << " and pitch error is " << pitch_error << "\n";
 
-        double angle_correction_kp = 0.0005;
-        double angle_correcttion_kd = 0.0001;
+        double angle_correction_kp =  0.0000009;
+        double angle_correcttion_kd = 0.0000005;
 
 
 
@@ -337,7 +341,10 @@ class SkyweaveLinkTracker : public ModelPlugin {
        if (info.simTime < common::Time(20, 0)) {
           this->gamma_surface->update_amplitude(0.05); // 0.05 meter amplitude
           // this->gamma_surface->update_phase(M_PI * (update_count % 2));
-          bool roll_and_not_pitch = (update_count % 2 == 0);
+          if (update_count % 4 == 0) {
+            roll_and_not_pitch = !roll_and_not_pitch;
+          }
+          
           if (update_count % 2 == 0) {
             this->gamma_surface->update_phase(M_PI);
             // do pitch correction in one iteration i.e. angle M_PI
@@ -353,9 +360,11 @@ class SkyweaveLinkTracker : public ModelPlugin {
             // this->gamma_surface->update_angle(M_PI/2); // 90 degrees
             if (roll_and_not_pitch) {
               // correct roll
-              this->gamma_surface->update_phase(angle_correction_kp * roll_error + angle_correcttion_kd * base_link_twist(3));
+              this->gamma_surface->update_phase(angle_correction_kp * roll_error - angle_correcttion_kd * base_link_twist(3));
+              // this->gamma_surface->update_phase(0.00);
             } else {
-              this->gamma_surface->update_phase(angle_correction_kp * pitch_error + angle_correcttion_kd * base_link_twist(4));
+              this->gamma_surface->update_phase(angle_correction_kp * pitch_error - angle_correcttion_kd * base_link_twist(4));
+              // this->gamma_surface->update_phase(0.00);
               // correct pitch              
             }
             // this->gamma_surface->update_phase(M_PI);
@@ -389,15 +398,15 @@ class SkyweaveLinkTracker : public ModelPlugin {
 
 
         // make a PD controller to make the u_dict[{0, 0}] track a desired base z position of 1.0 meter, by adding a correction term to u_dict[{0, 0}]
-        double kp_hover = 0.05;
-        double kd_hover = 0.001;
-        double desired_base_z_position = 1.0;
+        double kp_hover = 10.5;
+        double kd_hover = 4.01;
+        double desired_base_z_position = 2.0;
         double current_base_z_position = base_link_pose(2);
         double position_error = desired_base_z_position - current_base_z_position;
         double current_base_z_velocity = base_link_twist(2);
         double velocity_error = - current_base_z_velocity;
         double pd_correction = kp_hover * position_error + kd_hover * velocity_error;
-        // u_dict[{0, 0}] += 1 + pd_correction; // only z direction thrust
+        u_dict[{0, 0}] += 0.4 + pd_correction; // only z direction thrust
 
          std::cout << "Thruster commands:\n";
         for (const auto& [key, value] : u_dict) {
