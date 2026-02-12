@@ -37,6 +37,7 @@ public:
     std::shared_ptr<skyweave::controller::GammaSurface> gamma_surface_;
     std::shared_ptr<pinocchio::Model> pin_model_;
     pinocchio::Data pin_data_;
+    pinocchio::Data data_neutral;
     Eigen::VectorXd required_joint_positions_; // size nq
     Eigen::VectorXd desired_joint_acceleration_;
     Eigen::VectorXd spring_torques_;

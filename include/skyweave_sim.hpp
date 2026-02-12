@@ -77,7 +77,8 @@ class Springs {
           double k_rot = 0.00005);
 
   std::map<skyweave::GridIndex, Eigen::Vector3d> CalculateSpringTorques(
-      const Eigen::VectorXd& q_state);
+      const Eigen::VectorXd& q_state,
+      const Eigen::VectorXd& q_velocities);
 
   Eigen::VectorXd getGeneralizedSpringForces() const;
 
@@ -90,6 +91,8 @@ class Springs {
 
   const pinocchio::Model& model_;
   pinocchio::Data data_;
+
+  pinocchio::Data data_neutral;
   const skyweave::FrameIndexMap& frame_ids_;
   const std::map<skyweave::GridIndex, int>& gz_links_idx_map_;
   const std::vector<gazebo::physics::LinkPtr>& links_;

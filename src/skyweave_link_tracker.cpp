@@ -114,7 +114,7 @@ class SkyweaveLinkTracker : public ModelPlugin {
 
     this->springs = std::make_shared<skyweave_sim::Springs>(
         *(this->pin_model), this->frame_ids, this->gz_links_idx_map,
-        this->links, /*k_rot=*/0.5);
+        this->links, /*k_rot=*/100.005);
 
     this->gamma_surface = std::make_shared<skyweave::controller::GammaSurface>();
     this->shape_controller = std::make_shared<skyweave::controller::ShapeController>(
@@ -124,7 +124,7 @@ class SkyweaveLinkTracker : public ModelPlugin {
         this->shape_controller);
     this->shape_controller->acquire_spring_model(std::make_unique<skyweave_sim::Springs>(
         *(this->pin_model), this->frame_ids, this->gz_links_idx_map,
-        this->links, /*k_rot=*/1.1));
+        this->links, /*k_rot=*/100.1));
   }
 
  private:
@@ -190,11 +190,12 @@ class SkyweaveLinkTracker : public ModelPlugin {
     static double desired_pitch = 0.00;
     // TODO calculate the spring forces and apply the torques on the links based on the model
 
-    this->springs->ApplySpringTorques(
-        this->springs->CalculateSpringTorques(
-            this->state_estimator->CurrentJointPositions()
-        )
-    );
+    // this->springs->ApplySpringTorques(
+    //     this->springs->CalculateSpringTorques(
+    //         this->state_estimator->CurrentJointPositions(),
+    //         this->state_estimator->CurrentJointVelocities()
+    //     )
+    // );
 
 
 //    rate of the state estimator
@@ -335,8 +336,8 @@ class SkyweaveLinkTracker : public ModelPlugin {
         double pitch_error =  pitch - desired_pitch; // desired pitch is 0
         std::cout << "roll error is " << roll_error << " and pitch error is " << pitch_error << "\n";
 
-        double angle_correction_kp =  11.009;
-        double angle_correcttion_kd = 2.0000005;
+        double angle_correction_kp =  0.509;
+        double angle_correcttion_kd = 0.105;
         static bool phase_switch = false;
 
 
@@ -344,9 +345,9 @@ class SkyweaveLinkTracker : public ModelPlugin {
         // set the desired shape in gamma surface
         // TODO make amplitude oscillate between 0 and 0.05 with a parameterized frequency with time as control_ticks
           // --- params ---
-          const double A = 0.01;                 // max amplitude
+          const double A = 0.001;                 // max amplitude
           const double dt = 1.0 / 50.0;          // if control_ticks increments at 50 Hz (change if not)
-          const double f_env = 1.0 / 5;        // envelope frequency (Hz). Period = 4s. Change as you like.
+          const double f_env = 1.0 / 0.025;        // envelope frequency (Hz). Period = 4s. Change as you like.
           const double eps = 1e-4;               // "close to zero" threshold in meters
 
           // --- time ---
@@ -359,12 +360,18 @@ class SkyweaveLinkTracker : public ModelPlugin {
           // --- edge-detect "near zero" to flip once per cycle ---
           static bool was_near_zero = true; // start true so we don't flip immediately at t=0
           bool near_zero = (amp < eps);
+          static int zero_crossings = 0; // count how many times we've crossed zero
 
           if (near_zero && !was_near_zero) {
+            zero_crossings++;
             phase_switch = !phase_switch;   // flip only when we RETURN to zero
           }
           was_near_zero = near_zero;
-
+          if(zero_crossings > 2) {
+            // after 20 zero crossings, stop flipping to avoid instability
+            zero_crossings = 0;
+            roll_and_not_pitch = !roll_and_not_pitch; // switch between correcting roll and pitch every 2 zero crossings (i.e., every 4 cycles)
+          }
 
          this->gamma_surface->update_amplitude(amp); // 0.05 meter amplitude
           // this->gamma_surface->update_phase(M_PI * (update_count % 2));
@@ -388,11 +395,11 @@ class SkyweaveLinkTracker : public ModelPlugin {
             // this->gamma_surface->update_angle(M_PI/2); // 90 degrees
             if (roll_and_not_pitch) {
               // correct roll
-              // this->gamma_surface->update_phase(angle_correction_kp * roll_error + angle_correcttion_kd * base_link_twist(3));
-              this->gamma_surface->update_phase(0.00);
+              this->gamma_surface->update_phase(angle_correction_kp * roll_error + angle_correcttion_kd * base_link_twist(3));
+              // this->gamma_surface->update_phase(0.00);
             } else {
-              // this->gamma_surface->update_phase(angle_correction_kp * pitch_error + angle_correcttion_kd * base_link_twist(4));
-              this->gamma_surface->update_phase(0.00);
+              this->gamma_surface->update_phase(angle_correction_kp * pitch_error + angle_correcttion_kd * base_link_twist(4));
+              // this->gamma_surface->update_phase(0.00);
               // correct pitch              
             }
           }
@@ -403,6 +410,7 @@ class SkyweaveLinkTracker : public ModelPlugin {
         //  this->shape_controller->ComputeControlStep();
         std::map<skyweave::GridIndex, double> u_dict = this->shape_controller->ComputeControlStep();
         // std::map<skyweave::GridIndex, double> u_dict = this->hover_controller->ComputeControlStep();
+        // std::map<skyweave::GridIndex, double> u_dict;
 
 
         // make a PD controller to make the u_dict[{0, 0}] track a desired base z position of 1.0 meter, by adding a correction term to u_dict[{0, 0}]
@@ -415,6 +423,23 @@ class SkyweaveLinkTracker : public ModelPlugin {
         double velocity_error = - current_base_z_velocity;
         double pd_correction = kp_hover * position_error + kd_hover * velocity_error;
         u_dict[{0, 0}] += 0.4 + pd_correction; // only z direction thrust
+
+        double kp_hover_xy = 0.05;
+        double kd_hover_xy = 0.01;
+        double desired_base_x_position = 0.0;
+        double desired_base_y_position = 0.0;
+        double current_base_x_position = base_link_pose(0);
+        double current_base_y_position = base_link_pose(1);
+        double position_error_x = desired_base_x_position - current_base_x_position;
+        double position_error_y = desired_base_y_position - current_base_y_position;
+        double current_base_x_velocity = base_link_twist(0);
+        double current_base_y_velocity = base_link_twist(1);
+        double velocity_error_x = - current_base_x_velocity;
+        double velocity_error_y = - current_base_y_velocity;
+        double pd_correction_x = kp_hover_xy * position_error_x + kd_hover_xy * velocity_error_x;
+        double pd_correction_y = kp_hover_xy * position_error_y + kd_hover_xy * velocity_error_y;
+        desired_roll = pd_correction_y; // desired roll is to correct for y position error
+        desired_pitch = pd_correction_x; // desired pitch is to correct for x position error
 
          std::cout << "Thruster commands:\n";
         for (const auto& [key, value] : u_dict) {

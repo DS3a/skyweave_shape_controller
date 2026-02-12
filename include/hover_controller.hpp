@@ -232,7 +232,7 @@ public: // make everything public cuz I'm lazy to make setter and getter functio
         pinocchio::computeJointJacobians(*(this->pin_model_), this->pin_data_, current_q);
 
 
-        this->shape_controller_->springs_->CalculateSpringTorques(current_q.segment(7, est_q.size()));
+        this->shape_controller_->springs_->CalculateSpringTorques(current_q.segment(7, est_q.size()), current_v.segment(6, est_v.size()));
         Eigen::VectorXd spring_forces_shape = this->shape_controller_->springs_->getGeneralizedSpringForces(); 
         // this is the S(q) term in the dynamics equation, we need to add 6 zeros on top of it to account for the floating base
         Eigen::VectorXd spring_generalized_forces = Eigen::VectorXd::Zero(this->pin_model_->nv);

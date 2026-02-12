@@ -107,7 +107,7 @@ std::map<skyweave::GridIndex, double> ShapeController::ComputeControlStep() {
   // (void)h;
   Eigen::VectorXd goal_q = this->gamma_surface_->get_goal_joint_positions();
 
-  this->springs_->CalculateSpringTorques(goal_q);
+  this->springs_->CalculateSpringTorques(goal_q, Eigen::VectorXd::Zero(current_v.size()));
   this->setSpringTorques(
       this->springs_->getGeneralizedSpringForces());
 
