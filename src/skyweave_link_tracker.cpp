@@ -33,6 +33,9 @@
 // #define SDF_PATH "mass_mesh_open_tree.sdf"
 #define SDF_PATH "/home/ds3a/dev/wadiyan_carpet/models/mesh/mass_mesh_open_tree.sdf"
 
+
+// #define MAKE_STIFF_FOR_DBG
+
 double unwrap(double prev, double current)
 {
     double diff = current - prev;
@@ -112,11 +115,13 @@ class SkyweaveLinkTracker : public ModelPlugin {
     gzmsg << "SkyweaveLinkTracker loaded with " << this->links.size()
           << " links." << std::endl;
 
+
     this->springs = std::make_shared<skyweave_sim::Springs>(
         *(this->pin_model), this->frame_ids, this->gz_links_idx_map,
-        this->links, /*k_rot=*/100.005);
+        this->links, /*k_rot=*/10.005);
 
     this->gamma_surface = std::make_shared<skyweave::controller::GammaSurface>();
+    this->gamma_surface->Initialize(0.4, this->side_links);
     this->shape_controller = std::make_shared<skyweave::controller::ShapeController>(
         this->state_estimator, this->gamma_surface, this->pin_model);
     this->hover_controller = std::make_shared<skyweave::controller::HoverController>(
@@ -336,9 +341,18 @@ class SkyweaveLinkTracker : public ModelPlugin {
         double pitch_error =  pitch - desired_pitch; // desired pitch is 0
         std::cout << "roll error is " << roll_error << " and pitch error is " << pitch_error << "\n";
 
-        double angle_correction_kp =  0.509;
-        double angle_correcttion_kd = 0.105;
+        double angle_correction_kp =  0.00509;
+        double angle_correcttion_kd = 0.00105;
         static bool phase_switch = false;
+
+
+        #ifdef MAKE_STIFF_FOR_DBG
+        
+          angle_correction_kp = 0;
+          angle_correcttion_kd = 0;
+
+
+        #endif
 
 
 
@@ -414,9 +428,9 @@ class SkyweaveLinkTracker : public ModelPlugin {
 
 
         // make a PD controller to make the u_dict[{0, 0}] track a desired base z position of 1.0 meter, by adding a correction term to u_dict[{0, 0}]
-        double kp_hover = 10.5;
-        double kd_hover = 4.01;
-        double desired_base_z_position = 2.0;
+        double kp_hover = 4.5;
+        double kd_hover = 2.01;
+        double desired_base_z_position = 0.7;
         double current_base_z_position = base_link_pose(2);
         double position_error = desired_base_z_position - current_base_z_position;
         double current_base_z_velocity = base_link_twist(2);
@@ -424,8 +438,8 @@ class SkyweaveLinkTracker : public ModelPlugin {
         double pd_correction = kp_hover * position_error + kd_hover * velocity_error;
         u_dict[{0, 0}] += 0.4 + pd_correction; // only z direction thrust
 
-        double kp_hover_xy = 0.05;
-        double kd_hover_xy = 0.01;
+        double kp_hover_xy = 0.00;
+        double kd_hover_xy = 0.00;
         double desired_base_x_position = 0.0;
         double desired_base_y_position = 0.0;
         double current_base_x_position = base_link_pose(0);
@@ -441,10 +455,15 @@ class SkyweaveLinkTracker : public ModelPlugin {
         desired_roll = pd_correction_y; // desired roll is to correct for y position error
         desired_pitch = pd_correction_x; // desired pitch is to correct for x position error
 
-         std::cout << "Thruster commands:\n";
+        // track the total effort being applied by the thrusters for debugging
+        std::cout << "Thruster commands:\n";
+        double effort = 0;
         for (const auto& [key, value] : u_dict) {
           std::cout << " - (" << key.first << ", " << key.second << "): " << value << "\n";
+          effort += std::pow(value, 2);
         }
+
+        std::cout << "effort" << update_count << ", " << effort << "\n"; 
 
         // std::map<std::pair<int, int>, double> u_dict2 = {
         //     {std::make_pair(-2, -2), 0.067391},
