@@ -220,6 +220,24 @@ class SkyweaveLinkTracker : public ModelPlugin {
         Eigen::Vector3d centre;
         Eigen::Vector3d base_linear_vel = Eigen::Vector3d::Zero();
         Eigen::Vector3d base_angular_vel = Eigen::Vector3d::Zero();
+
+        struct GroupStats {
+          int count = 0;
+          double sum_x = 0.0;
+          double sum_y = 0.0;
+          double sum_z = 0.0;
+          double sum_roll = 0.0;
+          double sum_pitch = 0.0;
+          double sum_yaw = 0.0;
+          double sum_sq_x = 0.0;
+          double sum_sq_y = 0.0;
+          double sum_sq_z = 0.0;
+          double sum_sq_roll = 0.0;
+          double sum_sq_pitch = 0.0;
+          double sum_sq_yaw = 0.0;
+        };
+
+        std::map<int, GroupStats> grouped_stats;
  
         for (const auto& link : this->links) {
           if (!link) {
@@ -239,6 +257,31 @@ class SkyweaveLinkTracker : public ModelPlugin {
           if (ParseMassLinkName(link->GetName(), xIndex, yIndex)) {
             this->positions[{xIndex, yIndex}] =
                 Eigen::Vector3d(pose.Pos().X(), pose.Pos().Y(), pose.Pos().Z());
+
+            if (xIndex == -2 || xIndex == 0 || xIndex == 2) {
+              GroupStats& g = grouped_stats[xIndex];
+              const double x = pose.Pos().X();
+              const double y = pose.Pos().Y();
+              const double z = pose.Pos().Z();
+              const double roll = pose.Rot().Roll();
+              const double pitch = pose.Rot().Pitch();
+              const double yaw = pose.Rot().Yaw();
+
+              g.count += 1;
+              g.sum_x += x;
+              g.sum_y += y;
+              g.sum_z += z;
+              g.sum_roll += roll;
+              g.sum_pitch += pitch;
+              g.sum_yaw += yaw;
+
+              g.sum_sq_x += x * x;
+              g.sum_sq_y += y * y;
+              g.sum_sq_z += z * z;
+              g.sum_sq_roll += roll * roll;
+              g.sum_sq_pitch += pitch * pitch;
+              g.sum_sq_yaw += yaw * yaw;
+            }
             
             if (xIndex == 0 && yIndex == 0) {
               // centre_orientation = Eigen::Quaterniond(
@@ -259,6 +302,57 @@ class SkyweaveLinkTracker : public ModelPlugin {
               base_angular_vel = Eigen::Vector3d(ang_vel.X(), ang_vel.Y(), ang_vel.Z());
             }
           }
+        }
+
+        const double timestamp = info.simTime.Double();
+        for (const int group_x : {-2, 0, 2}) {
+          auto it = grouped_stats.find(group_x);
+          if (it == grouped_stats.end() || it->second.count == 0) {
+            std::cout << "SKYWEAVE_GROUP_STATS,"
+                      << timestamp << ","
+                      << group_x << ","
+                      << 0 << ","
+                      << "nan,nan,nan,nan,nan,nan,nan,nan,nan,nan,nan,nan\n";
+            continue;
+          }
+
+          const GroupStats& g = it->second;
+          const double n = static_cast<double>(g.count);
+
+          const double mean_x = g.sum_x / n;
+          const double mean_y = g.sum_y / n;
+          const double mean_z = g.sum_z / n;
+          const double mean_roll = g.sum_roll / n;
+          const double mean_pitch = g.sum_pitch / n;
+          const double mean_yaw = g.sum_yaw / n;
+
+          const auto variance_from_moments = [](double sum_sq, double mean, double denom) {
+            return std::max(0.0, sum_sq / denom - mean * mean);
+          };
+
+          const double var_x = variance_from_moments(g.sum_sq_x, mean_x, n);
+          const double var_y = variance_from_moments(g.sum_sq_y, mean_y, n);
+          const double var_z = variance_from_moments(g.sum_sq_z, mean_z, n);
+          const double var_roll = variance_from_moments(g.sum_sq_roll, mean_roll, n);
+          const double var_pitch = variance_from_moments(g.sum_sq_pitch, mean_pitch, n);
+          const double var_yaw = variance_from_moments(g.sum_sq_yaw, mean_yaw, n);
+
+          std::cout << "SKYWEAVE_GROUP_STATS,"
+                    << timestamp << ","
+                    << group_x << ","
+                    << g.count << ","
+                    << mean_x << ","
+                    << var_x << ","
+                    << mean_y << ","
+                    << var_y << ","
+                    << mean_z << ","
+                    << var_z << ","
+                    << mean_roll << ","
+                    << var_roll << ","
+                    << mean_pitch << ","
+                    << var_pitch << ","
+                    << mean_yaw << ","
+                    << var_yaw << "\n";
         }
 
         stream << "Skyweave link positions grid:" << std::endl;
