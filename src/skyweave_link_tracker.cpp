@@ -118,7 +118,7 @@ class SkyweaveLinkTracker : public ModelPlugin {
 
     this->springs = std::make_shared<skyweave_sim::Springs>(
         *(this->pin_model), this->frame_ids, this->gz_links_idx_map,
-        this->links, /*k_rot=*/10.005);
+        this->links, /*k_rot=*/100.005);
 
     this->gamma_surface = std::make_shared<skyweave::controller::GammaSurface>();
     this->gamma_surface->Initialize(0.4, this->side_links);
@@ -320,7 +320,7 @@ class SkyweaveLinkTracker : public ModelPlugin {
 
         static double roll_prev = 0.0;
         static double pitch_prev = 0.0;
-        static bool roll_and_not_pitch = true; // whether to correct roll or pitch in the current iteration
+        static bool roll_and_not_pitch = false; // whether to correct roll or pitch in the current iteration
 
         // NOTE euler angles are acting weirdly, they are not continuous and they jump from -pi to pi randomly, so I need to unwrap them to make them continuous before feeding them into 
         // the controller. I think this is because of the way the quaternion is converted to euler angles, it is not guaranteed to be continuous. 
@@ -341,10 +341,10 @@ class SkyweaveLinkTracker : public ModelPlugin {
         double pitch_error =  pitch - desired_pitch; // desired pitch is 0
         std::cout << "roll error is " << roll_error << " and pitch error is " << pitch_error << "\n";
 
-        double angle_correction_kp =  0.00509;
-        double angle_correcttion_kd = 0.00105;
+        double angle_correction_kp =  0.000509;
+        double angle_correcttion_kd = 0.000205;
         static bool phase_switch = false;
-
+        #define MAKE_STIFF_FOR_DBG
 
         #ifdef MAKE_STIFF_FOR_DBG
         
@@ -359,10 +359,10 @@ class SkyweaveLinkTracker : public ModelPlugin {
         // set the desired shape in gamma surface
         // TODO make amplitude oscillate between 0 and 0.05 with a parameterized frequency with time as control_ticks
           // --- params ---
-          const double A = 0.001;                 // max amplitude
+          const double A = 0.05;                 // max amplitude
           const double dt = 1.0 / 50.0;          // if control_ticks increments at 50 Hz (change if not)
           const double f_env = 1.0 / 0.025;        // envelope frequency (Hz). Period = 4s. Change as you like.
-          const double eps = 1e-4;               // "close to zero" threshold in meters
+          const double eps = 1e-6;               // "close to zero" threshold in meters
 
           // --- time ---
           double t = control_ticks * dt;
@@ -384,7 +384,7 @@ class SkyweaveLinkTracker : public ModelPlugin {
           if(zero_crossings > 2) {
             // after 20 zero crossings, stop flipping to avoid instability
             zero_crossings = 0;
-            roll_and_not_pitch = !roll_and_not_pitch; // switch between correcting roll and pitch every 2 zero crossings (i.e., every 4 cycles)
+            // roll_and_not_pitch = !roll_and_not_pitch; // switch between correcting roll and pitch every 2 zero crossings (i.e., every 4 cycles)
           }
 
          this->gamma_surface->update_amplitude(amp); // 0.05 meter amplitude
@@ -428,15 +428,15 @@ class SkyweaveLinkTracker : public ModelPlugin {
 
 
         // make a PD controller to make the u_dict[{0, 0}] track a desired base z position of 1.0 meter, by adding a correction term to u_dict[{0, 0}]
-        double kp_hover = 4.5;
-        double kd_hover = 2.01;
-        double desired_base_z_position = 0.7;
+        double kp_hover = 10.5;
+        double kd_hover = 4.01;
+        double desired_base_z_position = 0.5;
         double current_base_z_position = base_link_pose(2);
         double position_error = desired_base_z_position - current_base_z_position;
         double current_base_z_velocity = base_link_twist(2);
         double velocity_error = - current_base_z_velocity;
         double pd_correction = kp_hover * position_error + kd_hover * velocity_error;
-        u_dict[{0, 0}] += 0.4 + pd_correction; // only z direction thrust
+        u_dict[{0, 0}] += 0.1*8.81 + pd_correction; // only z direction thrust
 
         double kp_hover_xy = 0.00;
         double kd_hover_xy = 0.00;
@@ -457,6 +457,7 @@ class SkyweaveLinkTracker : public ModelPlugin {
 
         // track the total effort being applied by the thrusters for debugging
         std::cout << "Thruster commands:\n";
+        std::cout << "zis " << current_base_z_position << "\n";
         double effort = 0;
         for (const auto& [key, value] : u_dict) {
           std::cout << " - (" << key.first << ", " << key.second << "): " << value << "\n";
