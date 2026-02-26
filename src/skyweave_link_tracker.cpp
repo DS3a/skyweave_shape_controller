@@ -203,6 +203,29 @@ class SkyweaveLinkTracker : public ModelPlugin {
     // );
 
 
+    if (this->data_print_period > 0.0) {
+      const double elapsed_data_print = (info.simTime - this->lastPrintTime).Double();
+      if (elapsed_data_print < this->data_print_period) {
+        // return;
+        // move to check if the controller is up next
+      } else {
+        /*
+         * TODO divide mass elements of skyweave into 3 groups
+         * one group which has all x=0
+         * one group which has all x=2
+         * one group which has all x=-2
+         * 
+         * then print the average z position of each group, with the variances
+         * print the average x, y position of each group as well, to see if there is any horizontal movement along with variance
+         * print the average roll, pitch and yaw of each group as well, with variance, to see if there is any rotation along with variance
+         * 
+         * print it in a way such that it can be easily plotted in a graph, with error bars for variance, to see the trends over time
+         * Like, if I single these lines out using grep, I can put them in a csv file and plot them, so just print them in a consistent format with timestamps, so that I can easily analyze the data after the simulation runs, to see how the system evolves over time and how well the controllers are performing in terms of maintaining the desired shape and position of the skyweave.
+         */
+
+      }
+    }
+
 //    rate of the state estimator
     if (this->printPeriod > 0.0) {
       const double elapsed = (info.simTime - this->lastPrintTime).Double();
@@ -457,7 +480,7 @@ class SkyweaveLinkTracker : public ModelPlugin {
 
         // track the total effort being applied by the thrusters for debugging
         std::cout << "Thruster commands:\n";
-        std::cout << "zis " << current_base_z_position << "\n";
+        // std::cout << "zis " << current_base_z_position << "\n";
         double effort = 0;
         for (const auto& [key, value] : u_dict) {
           std::cout << " - (" << key.first << ", " << key.second << "): " << value << "\n";
@@ -525,6 +548,8 @@ class SkyweaveLinkTracker : public ModelPlugin {
   std::map<skyweave::GridIndex, double> thruster_commands;
   double printRate = 2.0;
   double printPeriod = 0.5;
+  double data_print_frequency = 500;
+  double data_print_period = 0.002;
 
   double controlRate = 50.0;
   double controlPeriod = 0.02;
