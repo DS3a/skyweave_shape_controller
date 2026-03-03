@@ -62,6 +62,23 @@ namespace gazebo {
 class SkyweaveLinkTracker : public ModelPlugin {
  public:
   void Load(physics::ModelPtr _model, sdf::ElementPtr _sdf) override {
+    std::cout << "SKYWEAVE_GROUP_STATS,"
+                    << "timestamp" << ","
+                    << "group_x" << ","
+                    << "g.count" << ","
+                    << "mean_x" << ","
+                    << "var_x" << ","
+                    << "mean_y" << ","
+                    << "var_y" << ","
+                    << "mean_z" << ","
+                    << "var_z" << ","
+                    << "mean_roll" << ","
+                    << "var_roll" << ","
+                    << "mean_pitch" << ","
+                    << "var_pitch" << ","
+                    << "mean_yaw" << ","
+                    << "var_yaw" << "\n";
+
     if (!_model) {
       gzerr << "SkyweaveLinkTracker plugin requires a model.\n";
       return;
@@ -193,7 +210,6 @@ class SkyweaveLinkTracker : public ModelPlugin {
     Eigen::VectorXd base_link_twist(6);
     static double desired_roll = 0;
     static double desired_pitch = 0.00;
-    // TODO calculate the spring forces and apply the torques on the links based on the model
 
     // this->springs->ApplySpringTorques(
     //     this->springs->CalculateSpringTorques(
@@ -389,7 +405,6 @@ class SkyweaveLinkTracker : public ModelPlugin {
           }
         }
 
-
         base_link_pose.head<3>() = centre;
         Eigen::Quaterniond centre_orientation_q = Eigen::Quaterniond(
             centre_orientation.w(), centre_orientation.x(),
@@ -402,16 +417,22 @@ class SkyweaveLinkTracker : public ModelPlugin {
 
         this->state_estimator->setPositionMeasurements(this->positions, this->centre_orientation);
         this->state_estimator->updateEstimations(); 
-        this->hover_controller->setBaseLinkPose(base_link_pose);
-        this->hover_controller->setBaseLinkTwist(base_link_twist);
+        // this->hover_controller->setBaseLinkPose(base_link_pose);
+        // this->hover_controller->setBaseLinkTwist(base_link_twist);
         this->shape_controller->centre_orientation_ = this->centre_orientation;
 
         // gzmsg << stream.str();
-      }
-      double elapsed_control = (info.simTime - this->lastControlTime).Double();
-      if (elapsed_control < this->controlPeriod) {
-        // return;
-      } else {
+      
+      
+      
+      // }
+      // double elapsed_control = (info.simTime - this->lastControlTime).Double();
+      // if (elapsed_control < this->controlPeriod) {
+      //   // return;
+      // } else {
+      // run control and state-est at the saem frequency
+
+
         this->control_ticks++;
         this->lastControlTime = info.simTime;
 
@@ -423,9 +444,9 @@ class SkyweaveLinkTracker : public ModelPlugin {
         Eigen::Quaterniond zero_rotation_q(1, 0, 0, 0); // identity quaternion
 
         // find the euler angles of roll and pitch of the base link from the centre_orientation quaternion
-        Eigen::Quaterniond centre_orientation_q = Eigen::Quaterniond(
-            centre_orientation.w(), centre_orientation.x(),
-            centre_orientation.y(), centre_orientation.z());
+        // Eigen::Quaterniond centre_orientation_q = Eigen::Quaterniond(
+        //     centre_orientation.w(), centre_orientation.x(),
+        //     centre_orientation.y(), centre_orientation.z());
           
         centre_orientation_q = zero_rotation_q.conjugate() * centre_orientation_q; // rotate the orientation to make the initial orientation as the reference
         centre_orientation_q.normalize();
@@ -458,10 +479,9 @@ class SkyweaveLinkTracker : public ModelPlugin {
         double pitch_error =  pitch - desired_pitch; // desired pitch is 0
         std::cout << "roll error is " << roll_error << " and pitch error is " << pitch_error << "\n";
 
-        double angle_correction_kp =  0.000509;
-        double angle_correcttion_kd = 0.000205;
+        double angle_correction_kp =  0.0509;
+        double angle_correcttion_kd = 0.0205;
         static bool phase_switch = false;
-        #define MAKE_STIFF_FOR_DBG
 
         #ifdef MAKE_STIFF_FOR_DBG
         
@@ -476,10 +496,10 @@ class SkyweaveLinkTracker : public ModelPlugin {
         // set the desired shape in gamma surface
         // TODO make amplitude oscillate between 0 and 0.05 with a parameterized frequency with time as control_ticks
           // --- params ---
-          const double A = 0.05;                 // max amplitude
-          const double dt = 1.0 / 50.0;          // if control_ticks increments at 50 Hz (change if not)
-          const double f_env = 1.0 / 0.025;        // envelope frequency (Hz). Period = 4s. Change as you like.
-          const double eps = 1e-6;               // "close to zero" threshold in meters
+          const double A = 0.008;                 // max amplitude
+          const double dt = 1.0 / this->controlRate;          // if control_ticks increments at 50 Hz (change if not)
+          const double f_env = 1.0 / 0.002;        // envelope frequency (Hz). Period = 4s. Change as you like.
+          const double eps = 1e-8;               // "close to zero" threshold in meters
 
           // --- time ---
           double t = control_ticks * dt;
@@ -507,7 +527,7 @@ class SkyweaveLinkTracker : public ModelPlugin {
          this->gamma_surface->update_amplitude(amp); // 0.05 meter amplitude
           // this->gamma_surface->update_phase(M_PI * (update_count % 2));
           if (update_count % 4 == 0) {
-            // roll_and_not_pitch = !roll_and_not_pitch;
+            roll_and_not_pitch = !roll_and_not_pitch;
           }
           
           // check if amplitude is close to zero, every time it crosses zero, we flip the phase from PI to the PD controller, and back
@@ -546,14 +566,14 @@ class SkyweaveLinkTracker : public ModelPlugin {
 
         // make a PD controller to make the u_dict[{0, 0}] track a desired base z position of 1.0 meter, by adding a correction term to u_dict[{0, 0}]
         double kp_hover = 10.5;
-        double kd_hover = 4.01;
-        double desired_base_z_position = 0.5;
+        double kd_hover = 4.4;
+        double desired_base_z_position = 1.5;
         double current_base_z_position = base_link_pose(2);
         double position_error = desired_base_z_position - current_base_z_position;
         double current_base_z_velocity = base_link_twist(2);
         double velocity_error = - current_base_z_velocity;
         double pd_correction = kp_hover * position_error + kd_hover * velocity_error;
-        u_dict[{0, 0}] += 0.1*8.81 + pd_correction; // only z direction thrust
+        u_dict[{0, 0}] += 0.4 + pd_correction; // only z direction thrust
 
         double kp_hover_xy = 0.00;
         double kd_hover_xy = 0.00;
@@ -572,9 +592,18 @@ class SkyweaveLinkTracker : public ModelPlugin {
         desired_roll = pd_correction_y; // desired roll is to correct for y position error
         desired_pitch = pd_correction_x; // desired pitch is to correct for x position error
 
+        // if (this->control_ticks % 30 == 0) {
+        //   desired_roll = 0.5;
+        //   desired_pitch = 0.0;
+        // } else if (this->control_ticks % 500 == 0) {
+        //   desired_roll = 0.0;
+        //   desired_pitch = 0.5;
+        // }
+
         // track the total effort being applied by the thrusters for debugging
         std::cout << "Thruster commands:\n";
-        // std::cout << "zis " << current_base_z_position << "\n";
+        std::cout << "zis " << base_link_pose.transpose() << "\n";
+        std::cout << "zerror" << position_error << "\n";
         double effort = 0;
         for (const auto& [key, value] : u_dict) {
           std::cout << " - (" << key.first << ", " << key.second << "): " << value << "\n";
@@ -640,13 +669,13 @@ class SkyweaveLinkTracker : public ModelPlugin {
   std::map<skyweave::GridIndex, int> gz_links_idx_map; // the map from the grid index to the gazebo link index
   std::map<skyweave::GridIndex, std::shared_ptr<skyweave::Thruster>> thruster_map;
   std::map<skyweave::GridIndex, double> thruster_commands;
-  double printRate = 2.0;
-  double printPeriod = 0.5;
+  double printRate = 100.0;
+  double printPeriod = 0.01;
   double data_print_frequency = 500;
   double data_print_period = 0.002;
 
-  double controlRate = 50.0;
-  double controlPeriod = 0.02;
+  double controlRate = 100.0;
+  double controlPeriod = 0.01;
   int control_ticks = 0;
 
   std::shared_ptr<skyweave::controller::GammaSurface> gamma_surface;
