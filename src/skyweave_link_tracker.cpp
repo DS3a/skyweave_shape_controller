@@ -479,8 +479,8 @@ class SkyweaveLinkTracker : public ModelPlugin {
         double pitch_error =  pitch - desired_pitch; // desired pitch is 0
         std::cout << "roll error is " << roll_error << " and pitch error is " << pitch_error << "\n";
 
-        double angle_correction_kp =  0.0509;
-        double angle_correcttion_kd = 0.0205;
+        double angle_correction_kp =  0.062509;
+        double angle_correcttion_kd = 0.0105;
         static bool phase_switch = false;
 
         #ifdef MAKE_STIFF_FOR_DBG
@@ -496,10 +496,10 @@ class SkyweaveLinkTracker : public ModelPlugin {
         // set the desired shape in gamma surface
         // TODO make amplitude oscillate between 0 and 0.05 with a parameterized frequency with time as control_ticks
           // --- params ---
-          const double A = 0.008;                 // max amplitude
+          const double A = 0.003;                 // max amplitude
           const double dt = 1.0 / this->controlRate;          // if control_ticks increments at 50 Hz (change if not)
-          const double f_env = 1.0 / 0.002;        // envelope frequency (Hz). Period = 4s. Change as you like.
-          const double eps = 1e-8;               // "close to zero" threshold in meters
+          const double f_env = 1.0 / 0.00125;        // envelope frequency (Hz). Period = 4s. Change as you like.
+          const double eps = 1e-6;               // "close to zero" threshold in meters
 
           // --- time ---
           double t = control_ticks * dt;
@@ -513,20 +513,23 @@ class SkyweaveLinkTracker : public ModelPlugin {
           bool near_zero = (amp < eps);
           static int zero_crossings = 0; // count how many times we've crossed zero
 
-          if (near_zero && !was_near_zero) {
-            zero_crossings++;
-            phase_switch = !phase_switch;   // flip only when we RETURN to zero
-          }
-          was_near_zero = near_zero;
-          if(zero_crossings > 2) {
-            // after 20 zero crossings, stop flipping to avoid instability
-            zero_crossings = 0;
-            // roll_and_not_pitch = !roll_and_not_pitch; // switch between correcting roll and pitch every 2 zero crossings (i.e., every 4 cycles)
-          }
+          // if (near_zero && !was_near_zero) {
+          //   zero_crossings++;
+          //   phase_switch = !phase_switch;   // flip only when we RETURN to zero
+          // }
+          // was_near_zero = near_zero;
+          // if(zero_crossings > 2) {
+          //   // after 20 zero crossings, stop flipping to avoid instability
+          //   zero_crossings = 0;
+          //   roll_and_not_pitch = !roll_and_not_pitch; // switch between correcting roll and pitch every 2 zero crossings (i.e., every 4 cycles)
+          // }
 
-         this->gamma_surface->update_amplitude(amp); // 0.05 meter amplitude
-          // this->gamma_surface->update_phase(M_PI * (update_count % 2));
-          if (update_count % 4 == 0) {
+         this->gamma_surface->update_amplitude(A); // 0.05 meter amplitude
+          this->gamma_surface->update_phase(M_PI * (update_count % 2));
+          if (update_count % 2 == 0) {
+            phase_switch = !phase_switch;
+          }
+          if (update_count % 3 == 0) {
             roll_and_not_pitch = !roll_and_not_pitch;
           }
           
@@ -546,9 +549,12 @@ class SkyweaveLinkTracker : public ModelPlugin {
             // this->gamma_surface->update_angle(M_PI/2); // 90 degrees
             if (roll_and_not_pitch) {
               // correct roll
+              // this->gamma_surface->update_angle(M_PI/2);
               this->gamma_surface->update_phase(angle_correction_kp * roll_error + angle_correcttion_kd * base_link_twist(3));
               // this->gamma_surface->update_phase(0.00);
             } else {
+
+              // this->gamma_surface->update_angle(M_PI);
               this->gamma_surface->update_phase(angle_correction_kp * pitch_error + angle_correcttion_kd * base_link_twist(4));
               // this->gamma_surface->update_phase(0.00);
               // correct pitch              
@@ -565,10 +571,26 @@ class SkyweaveLinkTracker : public ModelPlugin {
 
 
         // make a PD controller to make the u_dict[{0, 0}] track a desired base z position of 1.0 meter, by adding a correction term to u_dict[{0, 0}]
-        double kp_hover = 10.5;
-        double kd_hover = 4.4;
-        double desired_base_z_position = 1.5;
+        double kp_hover = 12.5;
+        double kd_hover = 2.4;
+        double desired_base_z_position = 0;
+       
+        // else if (t > 5.0 && t < 5.5) {
+        //   desired_base_z_position = 1.5 + (1.5 - 0.75) * (5 - t) / 1.5;
+        // }
         double current_base_z_position = base_link_pose(2);
+        if (t < 1.5) {
+          desired_base_z_position = 0.25 + (0.75 - 0.25) * t / 1.5;
+        } else {
+          if (update_count % 2 == 0) {
+            desired_base_z_position = 0.75; // hold current position to test shape control
+          } else {
+            desired_base_z_position = 0.85; // hold current position to test shape control
+          }
+        }
+ 
+
+
         double position_error = desired_base_z_position - current_base_z_position;
         double current_base_z_velocity = base_link_twist(2);
         double velocity_error = - current_base_z_velocity;
