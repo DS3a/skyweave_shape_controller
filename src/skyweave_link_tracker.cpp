@@ -184,8 +184,8 @@ class SkyweaveLinkTracker : public ModelPlugin {
           this->gz_links_idx_map[index] = link_count;
           this->thruster_map[index] = std::make_shared<skyweave::Thruster>(link);
         }
+        link_count++;
       }
-      link_count++;
 
      
       // all frames will not exist in the pinocchio model because the sim mesh is now bigger than the control mesh 
@@ -203,10 +203,10 @@ class SkyweaveLinkTracker : public ModelPlugin {
     //   }
     // }
 
-    std::sort(this->links.begin(), this->links.end(),
-              [](const physics::LinkPtr& a, const physics::LinkPtr& b) {
-                return a->GetName() < b->GetName();
-              });
+    // std::sort(this->links.begin(), this->links.end(),
+    //           [](const physics::LinkPtr& a, const physics::LinkPtr& b) {
+    //             return a->GetName() < b->GetName();
+    //           });
   }
 
   static bool ParseMassLinkName(const std::string& name, int& xIndex,
