@@ -318,7 +318,7 @@ public: // make everything public cuz I'm lazy to make setter and getter functio
         //  (which determines the direction of the thrust force in the world frame)
         casadi::DM M_base_dm = casadi::DM::zeros(6, 6);
         M_base_dm = M_dm(casadi::Slice(0, 6), casadi::Slice(0, 6));
-        casadi:DM h_base_dm = casadi::DM::zeros(6, 1);
+        casadi::DM h_base_dm = casadi::DM::zeros(6, 1);
         h_base_dm = h_dm(casadi::Slice(0, 6), casadi::Slice());
         // to construct A_dm I need the rotational transform from the thruster to base link
         // I also need both their positions in the world frame to calculate the moment arm for the torque part of the wrench
