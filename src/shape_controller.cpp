@@ -147,7 +147,7 @@ std::map<skyweave::GridIndex, double> ShapeController::ComputeControlStep() {
 
   // TODO update model gravity vector based on current orientation
   Eigen::Vector3d gravity_vector =
-      this->centre_orientation_.toRotationMatrix() *
+      this->centre_orientation_.toRotationMatrix().transpose() *
       Eigen::Vector3d(0.0, 0.0, -9.81);
 
   this->pin_model_->gravity.linear() = gravity_vector;
