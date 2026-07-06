@@ -33,6 +33,8 @@
 // #define SDF_PATH "mass_mesh_open_tree.sdf"
 #define SDF_PATH "/home/ds3a/dev/wadiyan_carpet/models/mesh/mass_mesh_open_tree.sdf"
 
+#define SIM_MESH_SIZE 21
+#define CTR_MESH_SIZE 5
 
 // #define MAKE_STIFF_FOR_DBG
 
@@ -40,7 +42,7 @@ double unwrap(double prev, double current)
 {
     double diff = current - prev;
     while (diff > M_PI)  diff -= 2.0 * M_PI;
-    while (diff < -M_PI) diff += 2.0 * M_PI;
+    while (diff < -M_PI) diff += 2.0 * M_PI;;
     return current;
     // return prev + diff;
 }
@@ -155,6 +157,7 @@ class SkyweaveLinkTracker : public ModelPlugin {
     if (_sdf && _sdf->HasElement("link_name_prefix")) {
       prefix = _sdf->Get<std::string>("link_name_prefix");
     }
+    int propeller_stride = (SIM_MESH_SIZE - 1) / (CTR_MESH_SIZE - 1);
 
     this->links.clear();
     int link_count = 0;
@@ -169,19 +172,36 @@ class SkyweaveLinkTracker : public ModelPlugin {
         }
       }
       this->links.push_back(link);
-      int id = this->pin_model->getFrameId(name); // ensure frame exists in pinocchio model
-      if (id < 0) {
-        gzerr << "Link name " << name << " not found in Pinocchio model.\n";
-      } else {
-        skyweave::GridIndex index;
-        if (ParseMassLinkName(name, index.first, index.second)) {
+      int xidx, yidx;
+      if(ParseMassLinkName(name, xidx, yidx)) {
+        if ((xidx % propeller_stride == 0) && (yidx % propeller_stride == 0)) {
+          std::string pin_model_name =
+            "mass_x" + std::to_string(xidx / propeller_stride) +
+            "_y" + std::to_string(yidx / propeller_stride);
+          int id = this->pin_model->getFrameId(pin_model_name);
+          skyweave::GridIndex index(xidx/propeller_stride, yidx/propeller_stride);
           this->frame_ids[index] = id;
           this->gz_links_idx_map[index] = link_count;
           this->thruster_map[index] = std::make_shared<skyweave::Thruster>(link);
-          link_count++;
         }
       }
-    }
+      link_count++;
+
+     
+      // all frames will not exist in the pinocchio model because the sim mesh is now bigger than the control mesh 
+    //   int id = this->pin_model->getFrameId(name); // ensure frame exists in pinocchio model
+    //   if (id < 0) {
+    //     gzerr << "Link name " << name << " not found in Pinocchio model.\n";
+    //   } else {
+    //     skyweave::GridIndex index;
+    //     if (ParseMassLinkName(name, index.first, index.second)) {
+    //       this->frame_ids[index] = id;
+    //       this->gz_links_idx_map[index] = link_count;
+    //       this->thruster_map[index] = std::make_shared<skyweave::Thruster>(link);
+    //       link_count++;
+    //     }
+    //   }
+    // }
 
     std::sort(this->links.begin(), this->links.end(),
               [](const physics::LinkPtr& a, const physics::LinkPtr& b) {
@@ -496,9 +516,9 @@ class SkyweaveLinkTracker : public ModelPlugin {
         // set the desired shape in gamma surface
         // TODO make amplitude oscillate between 0 and 0.05 with a parameterized frequency with time as control_ticks
           // --- params ---
-          const double A = 0.003;                 // max amplitude
+          const double A = 0.05;                 // max amplitude
           const double dt = 1.0 / this->controlRate;          // if control_ticks increments at 50 Hz (change if not)
-          const double f_env = 1.0 / 0.00125;        // envelope frequency (Hz). Period = 4s. Change as you like.
+          const double f_env = 1.0 / 0.35;        // envelope frequency (Hz). Period = 4s. Change as you like.
           const double eps = 1e-6;               // "close to zero" threshold in meters
 
           // --- time ---
@@ -513,25 +533,25 @@ class SkyweaveLinkTracker : public ModelPlugin {
           bool near_zero = (amp < eps);
           static int zero_crossings = 0; // count how many times we've crossed zero
 
-          // if (near_zero && !was_near_zero) {
-          //   zero_crossings++;
-          //   phase_switch = !phase_switch;   // flip only when we RETURN to zero
-          // }
-          // was_near_zero = near_zero;
-          // if(zero_crossings > 2) {
-          //   // after 20 zero crossings, stop flipping to avoid instability
-          //   zero_crossings = 0;
-          //   roll_and_not_pitch = !roll_and_not_pitch; // switch between correcting roll and pitch every 2 zero crossings (i.e., every 4 cycles)
-          // }
+          if (near_zero && !was_near_zero) {
+            zero_crossings++;
+            phase_switch = !phase_switch;   // flip only when we RETURN to zero
+          }
+          was_near_zero = near_zero;
+          if(zero_crossings == 4) {
+            // after 20 zero crossings, stop flipping to avoid instability
+            zero_crossings = 0;
+            roll_and_not_pitch = !roll_and_not_pitch; // switch between correcting roll and pitch every 2 zero crossings (i.e., every 4 cycles)
+          }
 
-         this->gamma_surface->update_amplitude(A); // 0.05 meter amplitude
-          this->gamma_surface->update_phase(M_PI * (update_count % 2));
-          if (update_count % 2 == 0) {
-            phase_switch = !phase_switch;
-          }
-          if (update_count % 3 == 0) {
-            roll_and_not_pitch = !roll_and_not_pitch;
-          }
+          this->gamma_surface->update_amplitude(amp); // 0.05 meter amplitude
+          // this->gamma_surface->update_phase(M_PI * (update_count % 2));
+          // if (update_count % 2 == 0) {
+          //   phase_switch = !phase_switch;
+          // }
+          // if (update_count % 3 == 0) {
+          //   roll_and_not_pitch = !roll_and_not_pitch;
+          // }
           
           // check if amplitude is close to zero, every time it crosses zero, we flip the phase from PI to the PD controller, and back
           if (phase_switch) {
@@ -550,13 +570,13 @@ class SkyweaveLinkTracker : public ModelPlugin {
             if (roll_and_not_pitch) {
               // correct roll
               // this->gamma_surface->update_angle(M_PI/2);
-              this->gamma_surface->update_phase(angle_correction_kp * roll_error + angle_correcttion_kd * base_link_twist(3));
-              // this->gamma_surface->update_phase(0.00);
+              // this->gamma_surface->update_phase(angle_correction_kp * roll_error + angle_correcttion_kd * base_link_twist(3));
+              this->gamma_surface->update_phase(0.00);
             } else {
 
               // this->gamma_surface->update_angle(M_PI);
-              this->gamma_surface->update_phase(angle_correction_kp * pitch_error + angle_correcttion_kd * base_link_twist(4));
-              // this->gamma_surface->update_phase(0.00);
+              // this->gamma_surface->update_phase(angle_correction_kp * pitch_error + angle_correcttion_kd * base_link_twist(4));
+              this->gamma_surface->update_phase(0.00);
               // correct pitch              
             }
           }
@@ -579,14 +599,10 @@ class SkyweaveLinkTracker : public ModelPlugin {
         //   desired_base_z_position = 1.5 + (1.5 - 0.75) * (5 - t) / 1.5;
         // }
         double current_base_z_position = base_link_pose(2);
-        if (t < 1.5) {
-          desired_base_z_position = 0.25 + (0.75 - 0.25) * t / 1.5;
+        if (t < 10) {
+          desired_base_z_position = (2.5) * t / 10;
         } else {
-          if (update_count % 2 == 0) {
-            desired_base_z_position = 0.75; // hold current position to test shape control
-          } else {
-            desired_base_z_position = 0.85; // hold current position to test shape control
-          }
+          desired_base_z_position = 2.5;
         }
  
 
