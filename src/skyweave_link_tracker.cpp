@@ -137,7 +137,7 @@ class SkyweaveLinkTracker : public ModelPlugin {
 
     this->springs = std::make_shared<skyweave_sim::Springs>(
         *(this->pin_model), this->frame_ids, this->gz_links_idx_map,
-        this->links, /*k_rot=*/100.005);
+        this->links, /*k_rot=*/000.005);
 
     this->gamma_surface = std::make_shared<skyweave::controller::GammaSurface>();
     this->gamma_surface->Initialize(0.4, this->side_links);
@@ -148,7 +148,7 @@ class SkyweaveLinkTracker : public ModelPlugin {
         this->shape_controller);
     this->shape_controller->acquire_spring_model(std::make_unique<skyweave_sim::Springs>(
         *(this->pin_model), this->frame_ids, this->gz_links_idx_map,
-        this->links, /*k_rot=*/100.1));
+        this->links, /*k_rot=*/000.8));
   }
 
  private:
@@ -517,9 +517,9 @@ class SkyweaveLinkTracker : public ModelPlugin {
         // set the desired shape in gamma surface
         // TODO make amplitude oscillate between 0 and 0.05 with a parameterized frequency with time as control_ticks
           // --- params ---
-          const double A = 0.05;                 // max amplitude
+          const double A = 0.01;                 // max amplitude
           const double dt = 1.0 / this->controlRate;          // if control_ticks increments at 50 Hz (change if not)
-          const double f_env = 1.0 / 0.35;        // envelope frequency (Hz). Period = 4s. Change as you like.
+          const double f_env = 0.5;     // envelope frequency (Hz).
           const double eps = 1e-6;               // "close to zero" threshold in meters
 
           // --- time ---
@@ -539,11 +539,11 @@ class SkyweaveLinkTracker : public ModelPlugin {
             phase_switch = !phase_switch;   // flip only when we RETURN to zero
           }
           was_near_zero = near_zero;
-          if(zero_crossings == 4) {
-            // after 20 zero crossings, stop flipping to avoid instability
-            zero_crossings = 0;
-            roll_and_not_pitch = !roll_and_not_pitch; // switch between correcting roll and pitch every 2 zero crossings (i.e., every 4 cycles)
-          }
+          // if(zero_crossings == 4) {
+          //   // after 20 zero crossings, stop flipping to avoid instability
+          //   zero_crossings = 0;
+          //   roll_and_not_pitch = !roll_and_not_pitch; // switch between correcting roll and pitch every 2 zero crossings (i.e., every 4 cycles)
+          // }
 
           this->gamma_surface->update_amplitude(amp); // 0.05 meter amplitude
           // this->gamma_surface->update_phase(M_PI * (update_count % 2));
@@ -561,10 +561,10 @@ class SkyweaveLinkTracker : public ModelPlugin {
             // and in the next iteration do roll correction i.e. angle M_PI/2
             if (!roll_and_not_pitch) {
               // correct pitch
-              this->gamma_surface->update_angle(M_PI);
+              this->gamma_surface->update_angle(M_PI/4);
             } else {
               // correct roll
-              this->gamma_surface->update_angle(M_PI/2);
+              this->gamma_surface->update_angle(M_PI/4);
             }
           } else {
             // this->gamma_surface->update_angle(M_PI/2); // 90 degrees
@@ -583,6 +583,11 @@ class SkyweaveLinkTracker : public ModelPlugin {
           }
           
           update_count++;
+
+          this->gamma_surface->update_amplitude(0.03);
+          this->gamma_surface->update_angle(M_PI/4);          
+
+
           this->gamma_surface->update_frequency(M_PI/0.4);
 
         //  this->shape_controller->ComputeControlStep();
@@ -612,7 +617,7 @@ class SkyweaveLinkTracker : public ModelPlugin {
         double current_base_z_velocity = base_link_twist(2);
         double velocity_error = - current_base_z_velocity;
         double pd_correction = kp_hover * position_error + kd_hover * velocity_error;
-        u_dict[{0, 0}] += 0.4 + pd_correction; // only z direction thrust
+        // u_dict[{0, 0}] += 0.4 + pd_correction; // only z direction thrust
 
         double kp_hover_xy = 0.00;
         double kd_hover_xy = 0.00;
@@ -675,9 +680,34 @@ class SkyweaveLinkTracker : public ModelPlugin {
         //     {std::make_pair(2, 2), 0.067391},
         // };
 
+        std::map<std::pair<int, int>, double> u_dict2 = {
+            {std::make_pair(-2, -2), 0.0},
+            {std::make_pair(-2, -1), 0},
+            {std::make_pair(-2, 0), -0},
+            {std::make_pair(-2, 1), 0},
+            {std::make_pair(-2, 2), 3},
+            {std::make_pair(-1, 1), 0},
+            {std::make_pair(-1, 2), 0},
+            {std::make_pair(0, -2), 0},
+            {std::make_pair(0, -1), 0},
+            {std::make_pair(0, 0), 0.000000},
+            {std::make_pair(0, 1), 0},
+            {std::make_pair(0, 2), 0},
+            {std::make_pair(1, -2), 0},
+            {std::make_pair(1, -1), 0},
+            {std::make_pair(1, 0), 0},
+            {std::make_pair(1, 1), 0},
+            {std::make_pair(1, 2), 0},
+            {std::make_pair(2, -2), 0},
+            {std::make_pair(2, -1), 0},
+            {std::make_pair(2, 0), -0},
+            {std::make_pair(2, 1), 0},
+            {std::make_pair(2, 2), 0},
+        };
+
 
         this->thruster_commands.clear();
-        this->thruster_commands = u_dict; 
+        this->thruster_commands = u_dict2; 
       }      
     }
 
@@ -713,8 +743,8 @@ class SkyweaveLinkTracker : public ModelPlugin {
   double data_print_frequency = 500;
   double data_print_period = 0.002;
 
-  double controlRate = 100.0;
-  double controlPeriod = 0.01;
+  double controlRate = 50.0;
+  double controlPeriod = 0.02;
   int control_ticks = 0;
 
   std::shared_ptr<skyweave::controller::GammaSurface> gamma_surface;
