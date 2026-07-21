@@ -186,6 +186,7 @@ class SkyweaveLinkTracker : public ModelPlugin {
         }
         link_count++;
       }
+    }
 
      
       // all frames will not exist in the pinocchio model because the sim mesh is now bigger than the control mesh 
