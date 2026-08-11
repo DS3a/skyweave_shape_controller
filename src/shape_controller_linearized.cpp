@@ -53,8 +53,27 @@ void linearize_model() {
     this->u_c = Eigen::VectorXd::Zero(nv); // TODO get the last output from the thingi. or get the open loop controllers input for the first time
     Eigen::VectorXd tau = Eigen::VectorXd::Zero(nv);// TODO spring torques + fext passed through jacobians
 
-    Eigen::MatrixXd dq_dot_dq = Eigen::MatrixXd::Zero(nv, nv);
-    Eigen::MatrixXd dq_dot_dv = Eigen::Matrix::Identity(nv, nv);
+
+    /*
+        We are linearizing this system in the perturbation space of x and u, not in x and u.
+        As such, we don't take the derivatives of f(x, u). Rather, we are taking the derivative of f_1(deltax, deltau) = f(x circle+ deltax, u circle+ deltau)
+
+        x contains (q, v), and so deltax contains (deltaq, deltav). an important note is that deltaq is in the tangent space/perturbation space of the specific q.
+
+        the partial derivative of f_1(deltax, deltau) with respect to deltav is I.
+        this is because \dot {(delta q)} = v + delta v (when delta q is zero, i.e., we are linearizing around the reference point from which delta q deviates)
+        they are already in the tangent space, so it is just a simple vector addition, and therefore the partial derivative is just I.
+
+
+
+    */
+
+    Eigen::MatrixXd dq_dot_dv = Eigen::Matrix::Identity(nv, nv); // N(q) (also wrong, check above)
+    // Avq being the identity matrix is correct.
+    
+    
+    Eigen::MatrixXd dq_dot_dq = Eigen::MatrixXd::Zero(nv, nv); // d(N(q)v)/dq (this is wrong, check the explanation above)
+    // N(q) and N(q) v are a little difficult to calculate
     // TODO check this. this isn't correct because q contains quaternions.
     // q_dot = N(q)v
     // if q_dot = v, then the derivative with respect to q and v would have been 0 and I respectively
