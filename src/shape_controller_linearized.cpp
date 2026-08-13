@@ -73,6 +73,16 @@ void linearize_model() {
     
     
     Eigen::MatrixXd dq_dot_dq = Eigen::MatrixXd::Zero(nv, nv); // d(N(q)v)/dq (this is wrong, check the explanation above)
+    /*
+        this matrix is basically the partial of the the time derivative of delta q, 
+        with respect to delta q
+
+        An important note is that the time derivative of delta q is not the same as v
+        v is the generalized velocity, and the time derivative of q is the derivative of q
+    
+    */
+    
+    
     // N(q) and N(q) v are a little difficult to calculate
     // TODO check this. this isn't correct because q contains quaternions.
     // q_dot = N(q)v
