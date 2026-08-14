@@ -79,8 +79,79 @@ void linearize_model() {
 
         An important note is that the time derivative of delta q is not the same as v
         v is the generalized velocity, and the time derivative of q is the derivative of q
-    
+
+        
+        Aqq is basically the partial of (d( delta q) / dt) with respect to delta q
+        d(delta q)/dt is basically (deltaq+ - deltaq)/dt, where deltaq+ is the delta you get dt seconds after deltaq
+
+        the partial of d(delta q)/dt with respect to delta q is basically (J_F - I) / dt
+
+        where J_F is the partial of deltaq+ with respect to deltaq+
+        
+
     */
+
+    /*
+    * Computing A_qq = d(delta_q_dot) / d(delta_q)
+    * ------------------------------------------------
+    *
+    * Configuration-error propagation:
+    *
+    *   delta_q  ->  q  ->  q_plus  ->  delta_q_plus
+    *
+    * where:
+    *
+    *   q            = Integrate(q_ref, delta_q)
+    *   q_plus       = Integrate(q, v_ref * dt)
+    *   delta_q_plus = Difference(q_ref, q_plus)
+    *
+    * We want the Jacobian:
+    *
+    *   J_F = d(delta_q_plus) / d(delta_q)
+    *
+    * Using the chain rule:
+    *
+    *   J_F = [d(delta_q_plus) / d(q_plus)]
+    *         [d(q_plus)       / d(q)]
+    *         [d(q)            / d(delta_q)]
+    *
+    * At the linearization point delta_q = 0:
+    *
+    *   q = q_ref
+    *
+    * and, in tangent coordinates:
+    *
+    *   d(q) / d(delta_q) = I
+    *
+    * Therefore:
+    *
+    *   J_F = [d(delta_q_plus) / d(q_plus)]
+    *         [d(q_plus)       / d(q)]
+    *
+    * These two Jacobians can be obtained using:
+    *
+    *   dDifference(..., ARG1)  -> d(delta_q_plus) / d(q_plus)
+    *   dIntegrate (..., ARG0)  -> d(q_plus)       / d(q)
+    *
+    * Finally, since
+    *
+    *   delta_q_dot ~= (delta_q_plus - delta_q) / dt,
+    *
+    * we obtain:
+    *
+    *   A_qq ~= (J_F - I) / dt
+    *
+    * All Jacobians above are represented in Pinocchio's nv-dimensional
+    * tangent space, so A_qq is nv x nv.
+    */
+
+    //    Eigen::MatrixXd J1 = the partial of the integral of qr and delta q, but we are evaluating this jacobian at deltaq=0, so it will just be the identity matrix;
+    Eigen::MatrixXd J2 = Eigen::MatrixXd(nv, nv);
+    Eigen::MatrixXd J3 = Eigen::MatrixXd(nv, nv);
+    Eigen::MatrixXd JF = Eigen::MatrixXd(nv, nv);
+    double dt = 0.000001; 
+
+    this->pin_model_->dIntegrate(this->q_c, this->v_c * dt, J2, pinocchio::ARG0); 
     
     
     // N(q) and N(q) v are a little difficult to calculate
@@ -91,7 +162,7 @@ void linearize_model() {
 
     Eigen::MatrixXd ddv_dq = Eigen::MatrixXd(nv, nv);
     Eigen::MatrixXd ddv_dv = Eigen::MatrixXd(nv, nv);
-    pinocchio::computeABADerivatives(this->pin_model_, this->pin_data_, q_c, q_v, tau);
+    pinocchio::computeABADerivatives(this->pin_model_, this->pin_data_, this->q_c, this->v_c, tau);
     ddv_dq = this->pin_data_->ddq_dq;
     ddv_dv = this->pin_data_->ddq_dv;
 
