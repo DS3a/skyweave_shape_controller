@@ -1,4 +1,6 @@
-#include <skyweave_controller_linearized.hpp>
+#include <shape_controller_linearized.hpp>
+#include <pinocchio/algorithm/joint-configuration.hpp>
+#include <pinocchio/algorithm/aba-derivatives.hpp>
 
 namespace skyweave::controller {
 
@@ -44,7 +46,7 @@ ShapeControllerLinearized::ShapeControllerLinearized(
   }
 }
 
-void linearize_model() {
+void ShapeControllerLinearized::linearize_model() {
 
     int nv = this->pin_model_->nv;
 
@@ -68,7 +70,7 @@ void linearize_model() {
 
     */
 
-    Eigen::MatrixXd dq_dot_dv = Eigen::Matrix::Identity(nv, nv); // N(q) (also wrong, check above)
+    Eigen::MatrixXd dq_dot_dv = Eigen::MatrixXd::Identity(nv, nv); // N(q) (also wrong, check above)
     // Avq being the identity matrix is correct.
     
     
@@ -151,8 +153,8 @@ void linearize_model() {
     Eigen::MatrixXd JF = Eigen::MatrixXd(nv, nv);
     double dt = 0.000001; 
 
-    this->pin_model_->dIntegrate(this->q_c, this->v_c * dt, J2, pinocchio::ARG0); 
-    
+    pinocchio::dIntegrate(*this->pin_model_, this->q_c, this->v_c * dt, J2, pinocchio::ARG0); 
+    pinocchio::
     
     // N(q) and N(q) v are a little difficult to calculate
     // TODO check this. this isn't correct because q contains quaternions.
@@ -162,9 +164,9 @@ void linearize_model() {
 
     Eigen::MatrixXd ddv_dq = Eigen::MatrixXd(nv, nv);
     Eigen::MatrixXd ddv_dv = Eigen::MatrixXd(nv, nv);
-    pinocchio::computeABADerivatives(this->pin_model_, this->pin_data_, this->q_c, this->v_c, tau);
-    ddv_dq = this->pin_data_->ddq_dq;
-    ddv_dv = this->pin_data_->ddq_dv;
+    pinocchio::computeABADerivatives(*this->pin_model_, this->pin_data_, this->q_c, this->v_c, tau);
+    ddv_dq = this->pin_data_.ddq_dq;
+    ddv_dv = this->pin_data_.ddq_dv;
 
     this->Afx = Eigen::MatrixXd(2*nv, 2*nv);
     this->Afx.topLeftCorner(nv, nv) = dq_dot_dq;
